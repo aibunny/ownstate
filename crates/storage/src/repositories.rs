@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use ownstate_domain::{RepositoryId, TenantId};
 use ownstate_domain::capture::RepositoryLocator;
+use ownstate_domain::{RepositoryId, TenantId};
 
 use crate::error::StorageError;
 

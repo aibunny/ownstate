@@ -1,6 +1,16 @@
 /target
 .env
+.env.*
+!.env.example
 .fastembed_cache/
 *.log
 .DS_Store
 .opsx-current
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+node_modules/
+__pycache__/
+*.pyc

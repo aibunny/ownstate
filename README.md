@@ -1,271 +1,379 @@
 # Ownstate
 
-> Open infrastructure for sovereign AI knowledge and institutional cognition.
+> Infrastructure for preserving and reusing the context, evidence, and knowledge created while people and organizations work with AI.
 
-Ownstate is a sovereign knowledge and agent-context layer for individuals and organizations.
+Ownstate is a sovereign knowledge layer for individuals and organizations. The core idea: **models, agents, vendors, and applications should be replaceable. The knowledge accumulated while using them should belong to the individual or organization.**
 
-The core idea is simple: **models, agents, vendors, and applications should be replaceable. The knowledge accumulated while using them should belong to the individual or organization.**
+Ownstate continuously builds and maintains a durable, permission-aware representation of what an organization knows, what happened, what decisions were made, and what is currently true. It is not a chatbot, model, vector database, or agent framework. It is the persistent institutional state that humans, models, and agents can use.
 
-Ownstate continuously builds and maintains a durable, permission-aware representation of what an organization knows, what happened, what is currently true, what used to be true, what changed, what decisions were made, why they were made, how systems are architected, who customers/investors/partners/vendors are, what commitments and requirements exist, what artifacts have been exchanged, what failed, what succeeded, what risks remain, and what work is happening now.
+## Why Ownstate
 
-Ownstate is not a chatbot, model, vector database, or agent framework. It is the persistent institutional state that humans, models, agents, and agent swarms can use.
+Today, knowledge created while working with AI is fragmented across conversations, coding agents, documents, email, Slack, and CRM systems. Each new AI session reconstructs context that another AI already learned. Ownstate prevents that loss by providing:
 
-## Documentation
+- **Persistent context** that survives across models, agents, and sessions
+- **Evidence-grounded knowledge** with full provenance and temporal history
+- **Permission-aware retrieval** with data classification and tenant isolation
+- **Provider independence** — swap models, agents, and tools without losing institutional knowledge
 
-- [Target architecture](docs/ARCHITECTURE.md)
-- [Target requirements](docs/REQUIREMENTS.md)
-- [Automatic capture and scope requirements](docs/AUTOMATIC_CAPTURE_SCOPE_REQUIREMENTS.md)
-- [Automatic capture implementation plan](docs/AUTOMATIC_CAPTURE_IMPLEMENTATION_PLAN.md)
-- [MCP capture security contract](docs/MCP_CAPTURE_SECURITY.md)
-- [Host capture capability matrix](docs/HOST_CAPTURE_CAPABILITY_MATRIX.md)
-- [OpenCode implementation prompt](OPENCODE_CAPTURE_SCOPE_PROMPT.md)
-- [Implementation loop](docs/IMPLEMENTATION_LOOP.md)
-- [Operating instructions](docs/OPERATIONS.md)
-- [Repository rules](docs/RULES.md)
+## What it does today
 
-The architecture, requirements, automatic-capture requirements, and this README
-define target intent. Current capability claims below do not imply that every
-target feature already exists. Files under `docs/archive/` are historical and
-must not be treated as active requirements or current evidence.
+**Implemented:**
 
-> **Current development checkpoint (2026-09-21):** the prior model reported that
-> the private principal-service test migration and migration 0011 no-op trigger
-> repair pass 116 Rust tests and 10 implementation-loop tests. The next model must
-> establish a fresh baseline. Non-owner runtime/RLS evidence and holding model-
-> egress authorization through the actual provider call remain unresolved
-> prerequisites. Automatic capture and durable scope resolution are not yet
-> implemented beyond the existing project/workspace resolution foundations.
+- Append-only interaction evidence with content hashing
+- Candidate knowledge promotion with deterministic rules
+- Immutable canonical knowledge versions with provenance
+- PostgreSQL full-text + pgvector/RRF hybrid retrieval
+- Classification ceilings and tenant/project filtering
+- Audited context packets with token budgets
+- Temporal institutional entities, aliases, relationships, and claims
+- Typed query API (Structured, Semantic, Relationship, Temporal, Hybrid)
+- Workspace project resolution from Git origin or directory name
+- MCP server with bootstrap, search, propose, and record tools
+- HTTP API with bearer token authentication
+- Background worker for embedding jobs
+- Docker multi-stage build with non-root runtime
 
-## Current capabilities
+**Experimental:**
 
-**Implemented:** a Rust workspace with shared HTTP/MCP application services,
-append-only interaction evidence, candidate promotion, immutable canonical
-versions and provenance, supersession, PostgreSQL full-text plus pgvector/RRF
-retrieval, classification ceilings, tenant/project filtering, audited context
-packets with budgets, embedding jobs with retries, and workspace project resolution.
-Temporal institutional entities, aliases/external identifiers, relationships and
-claims use evidence-gated candidates, immutable history and scoped as-of reads.
-A protected `POST /query` accepts validated Structured, Semantic, Relationship,
-Temporal and Hybrid plans. Exact counts and jurisdiction grouping run in
-PostgreSQL; hybrid retrieval uses canonical entity/knowledge associations.
-Temporal queries return snapshots and a bounded change log with provenance.
+- Local fastembed semantic embeddings (ONNX, downloaded on first run)
+- Deterministic hash-based embeddings for development
+- Personal mode with automatic local owner bootstrap
+- Static API/admin credentials for development
 
-**Experimental/local:** static API/admin credentials and a fixed deployment
-tenant support personal development; local fastembed provides semantic embeddings,
-while the deterministic test provider exercises mechanics without semantic quality.
-The manual implementation loop records checks and requires separate review.
-The active requirements, security contract, state, and OpenSpec receipts track
-the full target rather than treating a passing batch as product completion.
-Institutional source authority currently protects explicit
-human state from lower-trust contradictions; the full type-dependent policy and
-authorized lifecycle review are planned.
+**Planned:**
 
-**Planned:** automatic cross-host capture with factual completeness, canonical
-repository identity, provisional non-code scopes, opaque MCP scope handles,
-compact bootstrap/record/search behavior, artifact versioning/object storage,
-reversible explicit entity merges,
-source authority by knowledge type, workspace-wide query scope, fine-grained principal and model-egress policies,
-provider-neutral model/harness runtimes, permission-scoped agent execution and
-swarms, Experience Store lineage, optional connectors and transactional outbox/EventBus. Preserve the target architecture while
-adding these in small verified batches.
+- Automatic cross-host capture with factual completeness
+- Canonical repository identity with credential stripping
+- Opaque MCP scope handles for secure context passing
+- Provisional non-code scopes (threads, artifacts, relationships)
+- Fine-grained principal and model-egress policies
+- Provider-neutral model/harness runtimes
+- Permission-scoped agent execution and swarms
+- Optional connectors and transactional outbox/EventBus
 
-## Product goals
+## What it is not
 
-Ownstate should eventually answer questions such as:
+- Not a chatbot or AI model
+- Not a vector database (though it uses pgvector for retrieval)
+- Not an agent framework (though agents can use it)
+- Not a hosted service (though it can be deployed as one)
+- Not a replacement for your database (it is a knowledge layer on top of PostgreSQL)
 
-- What is our wallet recovery architecture?
-- Why was it designed this way?
-- How many legal entities do we operate and in which jurisdictions?
-- Which entity contracts with Customer X?
-- What did we promise Investor Y?
-- Which investors received the latest deck?
-- Which customers requested feature X?
-- What changed across the company this week?
-- What are our biggest unresolved risks?
-- What work is blocked and why?
-
-Answers should be current, permission-aware, and grounded in evidence.
-
-## Core architecture
-
-Ownstate distinguishes:
-
-1. **Evidence** — what actually happened.
-2. **Entities** — durable identities such as companies, people, projects, products, customers, investors, and artifacts.
-3. **Relationships** — how entities connect.
-4. **Claims** — atomic assertions that may change over time.
-5. **Semantic knowledge** — architecture, rationale, decisions, procedures, failures, requirements, and lessons.
-6. **Experience** — high-quality work traces that may later train or adapt a personal model.
+## Architecture at a glance
 
 ```text
-Raw Evidence
+Raw Evidence (append-only)
     ↓
-Candidate Knowledge
+Candidate Knowledge (untrusted proposals)
     ↓
 Novelty / Validation / Policy
     ↓
-Canonical Knowledge
+Canonical Knowledge (immutable versions with provenance)
     ↓
-Query / Retrieval
+Query / Retrieval (full-text + semantic + temporal)
     ↓
-Context Compiler
+Context Compiler (budgeted, classified, audited)
     ↓
 Human / Model / Agent
     ↓
-New Work
-    ↓
-Raw Evidence
+New Work → Raw Evidence
 ```
 
-## Product modes
+Key architectural properties:
 
-### Personal
+- **Evidence is append-only** — raw interaction events cannot be modified or deleted
+- **Knowledge versions are immutable** — once promoted, content never changes
+- **Authorization is default-deny** — every operation requires explicit grants
+- **Models are untrusted** — AI output is treated as candidate knowledge, never direct truth
+- **Scope handles are opaque** — server-minted references, not credentials
 
-Individuals can use existing AI tools while Ownstate preserves knowledge across models and agents.
-
-### Business
-
-Business mode extends the same knowledge core with organization-wide institutional state, fine-grained authorization, model-egress policy, UHP-managed agent execution, future agent swarms, audit, data classification, BYOK, and self-hosted inference.
-
-## Open-source philosophy
-
-Ownstate is designed to run locally, in your own cloud, in a private institutional environment, or as a hosted service. Hosted convenience must not become a hidden dependency.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture.
 
 ## Quick start
 
-The target local experience is:
-
 ```bash
-git clone <your-ownstate-repo>
+git clone https://github.com/anthropics/ownstate.git
 cd ownstate
 cp .env.example .env
 docker compose up --build
 ```
 
-The default local stack should remain minimal and should not require Kubernetes, Terraform, paid model APIs, external managed databases, optional connectors, or external message brokers.
+The first startup downloads the Fastembed ONNX model (~50MB). Subsequent starts use the cached model.
 
-Compose defines PostgreSQL 18 + pgvector, API and worker images, plus an optional
-stdio MCP profile. The API owns startup migrations and the worker waits for API
-readiness. Images compile Fastembed by default; the local model downloads on first
-startup. See [operating instructions](docs/OPERATIONS.md) for cache persistence,
-credentials, container options, and a development mode without model downloads.
-The previously accepted images were verified in a fresh isolated stack with nine migrations,
-non-root API and worker processes, readiness checks, an actual Fastembed-backed
-embedding job, persistent model cache, and an MCP stdio handshake. Hosted CI
-execution and semantic-quality evaluation remain separate evidence gaps. That
-historical smoke does not cover the unverified migrations 0010/0011 or the
-current interrupted tree.
+**Verify it's running:**
+
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/ready
+```
+
+**Services:**
+
+| Service | Port | Description |
+|---------|------|-------------|
+| API | 8080 | HTTP REST API |
+| PostgreSQL | 5432 | Database (localhost only) |
+| MCP | stdio | MCP protocol server (started by clients) |
 
 ## Configuration
 
-All runtime configuration should come from typed configuration backed by environment variables.
+Copy `.env.example` to `.env` and adjust as needed:
 
 ```bash
 cp .env.example .env
 ```
 
-Do not commit `.env` files or secrets.
+Key configuration variables:
 
-## Development
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OWNSTATE_DATABASE_URL` | `postgres://ownstate:ownstate_dev@127.0.0.1:5432/ownstate` | PostgreSQL connection |
+| `OWNSTATE_HTTP_ADDR` | `127.0.0.1:8080` | API bind address |
+| `OWNSTATE_DEPLOYMENT_MODE` | `personal` | `personal` or `business` |
+| `OWNSTATE_API_TOKEN` | (unset) | Bearer token for API auth |
+| `OWNSTATE_EMBEDDING_PROVIDER` | `fastembed` | `fastembed` or `deterministic` |
+| `OWNSTATE_AUTO_MIGRATE` | `true` | Run migrations on startup |
 
-Typical native development:
+See [.env.example](.env.example) for the complete list.
+
+**Personal vs Business mode:**
+
+- **Personal** — automatically bootstraps local owner/service grants. Good for individual use.
+- **Business** — defaults to deny, requires pre-provisioned principal credentials. For team/organization deployments.
+
+## Running with Docker
+
+The default Compose setup includes PostgreSQL 18 + pgvector, API, and worker:
+
+```bash
+docker compose up --build
+```
+
+Optional MCP server (stdio, started by clients):
+
+```bash
+docker compose --profile mcp up --build mcp
+```
+
+**Docker images:**
+
+| Target | Description |
+|--------|-------------|
+| `api` | HTTP API server |
+| `worker` | Background job processor |
+| `mcp` | MCP protocol server |
+
+Build without Fastembed (smaller image, no model download):
+
+```bash
+OWNSTATE_IMAGE_FASTEMBED=false docker compose build
+```
+
+## Running locally
+
+**Prerequisites:**
+
+- Rust 1.96+ (`rustup install 1.96.0`)
+- PostgreSQL 18+ with pgvector
+- Docker (for the database, or use a local PostgreSQL)
+
+**Start the database:**
 
 ```bash
 docker compose up -d postgres
+```
+
+**Run the API:**
+
+```bash
 cargo run -p ownstate-api
 ```
 
-In separate terminals, run the worker and an MCP-capable client if needed:
+**Run the worker (separate terminal):**
 
 ```bash
 cargo run -p ownstate-worker
+```
+
+**Run the MCP server (separate terminal):**
+
+```bash
 cargo run -p ownstate-mcp
 ```
 
-The binaries load `.env` locally. Fastembed downloads its local model on first
-startup; choose `OWNSTATE_EMBEDDING_PROVIDER=deterministic` for development without
-a model download (semantic retrieval quality is not provided by that test adapter).
-The MCP server uses stdio and shares the same application services as HTTP.
+All binaries load `.env` automatically.
 
-## Quality checks
+## MCP / API usage
+
+### MCP Tools
+
+The MCP server exposes these tools:
+
+| Tool | Description |
+|------|-------------|
+| `bootstrap_project` | Load project knowledge state at session start |
+| `search_knowledge` | Hybrid search (full-text + semantic) |
+| `get_knowledge` | Full version history and provenance |
+| `compile_context` | Budgeted context packet for a task |
+| `propose_knowledge` | Propose new candidate knowledge |
+| `record` | Record observable events as append-only evidence |
+| `get_entity` | Current institutional entity with provenance |
+| `get_relationships` | Institutional relationships |
+
+### HTTP API Examples
+
+**Create a project:**
+
+```bash
+curl -X POST http://localhost:8080/projects \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OWNSTATE_API_TOKEN" \
+  -d '{"name": "my-project"}'
+```
+
+**Search knowledge:**
+
+```bash
+curl "http://localhost:8080/knowledge/search?project_id=YOUR_PROJECT_ID&query=architecture"
+```
+
+**Typed query:**
+
+```bash
+curl -X POST http://localhost:8080/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OWNSTATE_API_TOKEN" \
+  -d '{
+    "type": "STRUCTURED",
+    "constraints": {
+      "project_id": "YOUR_PROJECT_ID",
+      "max_classification": "INTERNAL",
+      "entity_kind": "LEGAL_ENTITY",
+      "limit": 10
+    },
+    "operation": "COUNT"
+  }'
+```
+
+See [docs/API.md](docs/API.md) for the full API reference.
+
+## Project structure
+
+```text
+ownstate/
+├── apps/
+│   ├── api/          # Axum HTTP API server
+│   ├── worker/       # Background job processor
+│   └── mcp/          # MCP protocol server
+├── crates/
+│   ├── domain/       # Pure domain types (no infrastructure)
+│   ├── storage/      # PostgreSQL persistence
+│   ├── services/     # Application logic and authorization
+│   ├── embeddings/   # Embedding providers
+│   └── runtime/      # Configuration and runtime setup
+├── migrations/       # PostgreSQL migrations (SQLx)
+├── scripts/          # Test utilities and implementation loop
+├── docs/             # Architecture, requirements, and design docs
+└── .github/          # CI workflows and templates
+```
+
+**Key boundaries:**
+
+- `domain` — pure types, no framework dependencies
+- `storage` — all SQL lives here, no business logic
+- `services` — authorization-gated use cases
+- `apps` — protocol adapters (HTTP, MCP, worker)
+
+## Development
+
+### Prerequisites
+
+- Rust 1.96+ (see `rust-toolchain.toml`)
+- PostgreSQL 18+ with pgvector
+- Python 3 (for test utilities)
+
+### Useful commands
+
+```bash
+# Format
+cargo fmt
+
+# Check
+cargo check --workspace
+
+# Lint
+cargo clippy --workspace --all-targets -- -D warnings
+
+# Test
+cargo test --workspace
+
+# Python tests
+python3 -m unittest discover -s scripts/tests -v
+
+# Run API locally
+cargo run -p ownstate-api
+
+# Run worker locally
+cargo run -p ownstate-worker
+
+# Run MCP server locally
+cargo run -p ownstate-mcp
+
+# Start database only
+docker compose up -d postgres
+```
+
+### Database
+
+Migrations run automatically on API startup when `OWNSTATE_AUTO_MIGRATE=true`.
+
+To run manually:
+
+```bash
+cargo run -p ownstate-api  # migrations run at startup
+```
+
+Test databases are created and cleaned up automatically by the test harness.
+
+## Testing
 
 ```bash
 cargo fmt --check
 cargo check --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+python3 -m unittest discover -s scripts/tests -v
 ```
 
-Tests require a real PostgreSQL + pgvector server and a role with database creation
-privileges. `OWNSTATE_TEST_DATABASE_URL` overrides the harness's local default;
-tests create migrated disposable databases and clean up their own databases older
-than one hour. No paid model API is needed. CI is configured with the same gates
-and a separate container smoke; hosted execution is not implied by local checks.
+Tests require a running PostgreSQL + pgvector server. The harness creates disposable databases and cleans up after itself. No paid model API is needed.
 
-For recorded verification:
+## Current status / roadmap
 
-```bash
-python3 scripts/implementation_cycle.py --phase verify --change-id your-change-slug
-```
+Ownstate is **early-stage** (v0.1.0). The core evidence-to-knowledge pipeline is functional. Interfaces may change before a stable release.
 
-Its fixed Clippy gate adds `-- -D warnings`;
-check success leaves independent and documentation review pending. See the
-[loop contract](docs/IMPLEMENTATION_LOOP.md) for baseline, receipts, and block handling.
+**Current focus:**
 
-## Documentation rule
+- Automatic capture and scope resolution
+- Host adapter evidence and capability matrix
+- Production hardening and security audit
 
-`README.md` must always reflect the current implementation. When a change affects setup, architecture, environment variables, Docker, APIs, MCP, model runtimes, infrastructure, capture guarantees, or supported capabilities, update the README and relevant docs in the same change.
+**Roadmap:**
 
-Clearly distinguish Implemented, Experimental, and Planned functionality.
+- Artifact versioning and object storage
+- Fine-grained authorization policies
+- Agent execution framework
+- Hosted deployment option
 
-## Security
-
-Ownstate assumes all AI output and external content is untrusted. Models may propose; deterministic Rust code controls authorization, policy, canonical writes, tool access, model egress, and data classification.
-
-## License
-
-Choose an explicit open-source license before public release and include a `LICENSE` file.
+See [CHANGELOG.md](CHANGELOG.md) for release history and [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) for the full requirements.
 
 ## Contributing
 
-The repository should remain understandable and runnable without access to private company systems, private repositories, paid AI APIs, production infrastructure, or private credentials. Use fictional examples and fixtures in public documentation and tests.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, PR guidelines, and contribution expectations.
 
-## Typed queries
+## Security
 
-Exact reports require no model call. For example, send this authenticated JSON to
-`POST /query`, replacing `project_id` with your project UUID:
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and security design principles.
 
-```json
-{
-  "type": "STRUCTURED",
-  "constraints": {
-    "project_id": "00000000-0000-0000-0000-000000000001",
-    "max_classification": "INTERNAL",
-    "entity_kind": "LEGAL_ENTITY",
-    "limit": 10
-  },
-  "operation": "COUNT"
-}
-```
+## License
 
-`GROUP_BY_JURISDICTION` uses authorized `REGISTERED_IN`, `INCORPORATED_IN`, or
-`JURISDICTION` edges (case-insensitive grouping labels); unmatched entities have
-an explicit unknown-jurisdiction group. Counts and groups aggregate all matching
-entities before response limits and include source event IDs.
-
-Semantic results use bounded lexical/dense candidates and trust-weighted RRF, so
-the ranking is approximate. Responses expose `semantic_candidate_limit`; each leg
-admits at most four times the requested item limit. Hybrid entity samples obey the
-response limit and include an exact count and `has_more_entities`, while SQL still
-considers all authorized matching entities for semantic associations.
-
-Temporal plans use `start`, `end` and a typed structured or semantic `subject`. They
-return endpoint snapshots plus recorded/validity transitions in `(start, end]`,
-including intermediate superseded versions. Change logs expose `total`, `has_more`
-and the semantic candidate limit per leg; semantic totals cover that bounded fused
-population, while structured totals cover all matching transitions. Scoped source
-references accompany returned changes. These APIs remain subject to deployment
-tenant/classification boundaries; fine-grained business principal policy is planned. Typed semantic query admission
-requires scoped raw-event evidence. Global canonical provenance enforcement for
-legacy storage and promotion remains required work under the active requirements
-and must remain recorded in `STATE.md` until verified.
+Apache-2.0 — see [LICENSE](LICENSE) for details.

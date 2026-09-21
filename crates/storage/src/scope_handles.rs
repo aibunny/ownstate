@@ -3,9 +3,9 @@
 use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Postgres, Transaction};
 
-use ownstate_domain::*;
 use ownstate_domain::capture::ScopeHandle;
 use ownstate_domain::enums::{OwnershipDomain, ResolutionState, ScopeKind};
+use ownstate_domain::*;
 
 use crate::error::StorageError;
 
@@ -145,9 +145,7 @@ struct ScopeHandleRow {
 impl ScopeHandleRow {
     fn into_domain(self, now: DateTime<Utc>) -> Option<ScopeHandle> {
         // Filter out revoked/expired handles
-        if self.revoked_at.is_some()
-            || self.expires_at.is_some_and(|exp| exp <= now)
-        {
+        if self.revoked_at.is_some() || self.expires_at.is_some_and(|exp| exp <= now) {
             return None;
         }
 

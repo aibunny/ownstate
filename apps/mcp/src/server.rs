@@ -1,6 +1,6 @@
 use ownstate_domain::{
-    CandidateId, EventId, InteractionEventType, ActorType, KnowledgeItemId, KnowledgeKind, ProjectId, ProposerKind,
-    SecurityClassification, SessionId,
+    ActorType, CandidateId, EventId, InteractionEventType, KnowledgeItemId, KnowledgeKind,
+    ProjectId, ProposerKind, SecurityClassification, SessionId,
 };
 use ownstate_services::ServiceError;
 use ownstate_services::policy::PrincipalServices;
@@ -453,18 +453,25 @@ impl OwnstateMcp {
     ) -> Result<String, ErrorData> {
         let project_id = self.resolve_project(&p.project_id, &p.project).await?;
 
-        let event_type: InteractionEventType = p.event_type.parse().map_err(|e: ownstate_domain::DomainError| {
-            ErrorData::invalid_params(e.to_string(), None)
-        })?;
-        let actor_type: ActorType = p.actor_type.parse().map_err(|e: ownstate_domain::DomainError| {
-            ErrorData::invalid_params(e.to_string(), None)
-        })?;
-        let security_classification: Option<SecurityClassification> = match &p.security_classification {
-            Some(raw) => Some(raw.parse().map_err(|e: ownstate_domain::DomainError| {
-                ErrorData::invalid_params(e.to_string(), None)
-            })?),
-            None => None,
-        };
+        let event_type: InteractionEventType =
+            p.event_type
+                .parse()
+                .map_err(|e: ownstate_domain::DomainError| {
+                    ErrorData::invalid_params(e.to_string(), None)
+                })?;
+        let actor_type: ActorType =
+            p.actor_type
+                .parse()
+                .map_err(|e: ownstate_domain::DomainError| {
+                    ErrorData::invalid_params(e.to_string(), None)
+                })?;
+        let security_classification: Option<SecurityClassification> =
+            match &p.security_classification {
+                Some(raw) => Some(raw.parse().map_err(|e: ownstate_domain::DomainError| {
+                    ErrorData::invalid_params(e.to_string(), None)
+                })?),
+                None => None,
+            };
         let occurred_at: Option<chrono::DateTime<chrono::Utc>> = match &p.occurred_at {
             Some(raw) => Some(raw.parse().map_err(|e| {
                 ErrorData::invalid_params(format!("invalid occurred_at: {e}"), None)

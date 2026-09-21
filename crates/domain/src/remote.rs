@@ -273,8 +273,7 @@ mod tests {
 
     #[test]
     fn credentials_are_stripped() {
-        let loc =
-            normalize_remote("https://token:ghp_xxxx@github.com/owner/repo.git").unwrap();
+        let loc = normalize_remote("https://token:ghp_xxxx@github.com/owner/repo.git").unwrap();
         assert!(!loc.canonical_uri.contains("token"));
         assert!(!loc.canonical_uri.contains("ghp_"));
         assert!(!loc.canonical_uri.contains("@"));

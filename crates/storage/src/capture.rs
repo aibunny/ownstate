@@ -3,8 +3,8 @@
 use chrono::{DateTime, Utc};
 use sqlx::{PgPool, Postgres, Transaction};
 
-use ownstate_domain::*;
 use ownstate_domain::enums::CaptureMode;
+use ownstate_domain::*;
 
 use crate::error::StorageError;
 
@@ -107,7 +107,7 @@ pub async fn find_idempotency_key(
 ) -> Result<Option<uuid::Uuid>, StorageError> {
     let row = sqlx::query_scalar::<_, uuid::Uuid>(
         "SELECT event_id FROM recording_idempotency
-         WHERE tenant_id = $1 AND project_id = $2 AND source = $3 AND source_event_id = $4"
+         WHERE tenant_id = $1 AND project_id = $2 AND source = $3 AND source_event_id = $4",
     )
     .bind(tenant_id.as_uuid())
     .bind(project_id.as_uuid())

@@ -68,6 +68,21 @@ jobs:
       - name: Test implementation cycle runner
         run: python3 -m unittest discover -s scripts/tests -v
 
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native build dependencies and pinned Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev
+          rustup toolchain install 1.96.0 --profile minimal
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Audit dependencies
+        run: cargo audit
+
   containers:
     runs-on: ubuntu-24.04
     timeout-minutes: 45

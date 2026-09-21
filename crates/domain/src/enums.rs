@@ -341,18 +341,42 @@ impl ChannelCompleteness {
     /// Count of channels marked complete.
     pub fn completed_count(&self) -> u32 {
         let mut n = 0;
-        if self.user_messages { n += 1; }
-        if self.assistant_messages { n += 1; }
-        if self.tool_calls { n += 1; }
-        if self.tool_results { n += 1; }
-        if self.commands { n += 1; }
-        if self.command_results { n += 1; }
-        if self.file_reads { n += 1; }
-        if self.file_writes { n += 1; }
-        if self.diffs { n += 1; }
-        if self.tests { n += 1; }
-        if self.artifacts { n += 1; }
-        if self.lifecycle { n += 1; }
+        if self.user_messages {
+            n += 1;
+        }
+        if self.assistant_messages {
+            n += 1;
+        }
+        if self.tool_calls {
+            n += 1;
+        }
+        if self.tool_results {
+            n += 1;
+        }
+        if self.commands {
+            n += 1;
+        }
+        if self.command_results {
+            n += 1;
+        }
+        if self.file_reads {
+            n += 1;
+        }
+        if self.file_writes {
+            n += 1;
+        }
+        if self.diffs {
+            n += 1;
+        }
+        if self.tests {
+            n += 1;
+        }
+        if self.artifacts {
+            n += 1;
+        }
+        if self.lifecycle {
+            n += 1;
+        }
         n
     }
 
