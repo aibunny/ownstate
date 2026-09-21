@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: ownstate
+          POSTGRES_PASSWORD: ownstate_dev
+          POSTGRES_DB: ownstate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ownstate -d ownstate"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      OWNSTATE_TEST_DATABASE_URL: postgres://ownstate:ownstate_dev@127.0.0.1:5432/ownstate
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native build dependencies and pinned Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libssl-dev libstdc++6
+          rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+      - name: Prove PostgreSQL 18, pgvector and disposable database creation
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          container = os.environ["POSTGRES_CONTAINER"]
+          def sql(database, statement):
+              return subprocess.check_output(
+                  ["docker", "exec", container, "psql", "-U", "ownstate", "-d", database,
+                   "-v", "ON_ERROR_STOP=1", "-At", "-c", statement], text=True).strip()
+          assert int(sql("ownstate", "SHOW server_version_num")) // 10000 == 18
+          assert sql("ownstate", "SELECT rolcreatedb FROM pg_roles WHERE rolname='ownstate'") == "t"
+          sql("ownstate", "CREATE DATABASE ownstate_ci_preflight")
+          try:
+              sql("ownstate_ci_preflight", "CREATE EXTENSION vector")
+              assert sql("ownstate_ci_preflight", "SELECT count(*) FROM pg_extension WHERE extname='vector'") == "1"
+          finally:
+              sql("ownstate", "DROP DATABASE ownstate_ci_preflight")
+          PY
+      - name: Format
+        run: cargo fmt --check
+      - name: Check workspace
+        run: cargo check --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test workspace against real PostgreSQL
+        run: cargo test --workspace
+      - name: Test implementation cycle runner
+        run: python3 -m unittest discover -s scripts/tests -v
+
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      COMPOSE_PROJECT_NAME: ownstate-ci
+      OWNSTATE_POSTGRES_CONTAINER_NAME: ownstate-ci-postgres
+      # This smoke proves mechanics without a first-run embedding model download.
+      OWNSTATE_EMBEDDING_PROVIDER: deterministic
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate default and MCP Compose configuration
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example --profile mcp config --quiet
+      - name: Build all three default Fastembed-enabled images
+        run: docker compose --env-file .env.example build api worker mcp
+      - name: Start a fresh database, API and worker
+        run: docker compose --env-file .env.example up -d --wait --wait-timeout 180
+      - name: Prove API readiness, non-root users and worker startup
+        run: |
+          curl --fail --silent http://127.0.0.1:8080/ready
+          test "$(docker compose --env-file .env.example exec -T api id -u)" = 10001
+          test "$(docker compose --env-file .env.example exec -T worker id -u)" = 10001
+          worker_started=false
+          for attempt in $(seq 1 30); do
+            if docker compose --env-file .env.example logs --no-color worker | grep -F "ownstate worker started"; then
+              worker_started=true
+              break
+            fi
+            sleep 1
+          done
+          test "$worker_started" = true
+      - name: Prove container MCP stdio initialize and tool discovery
+        run: |
+          python3 - <<'PY'
+          import json
+          import selectors
+          import subprocess
+          import time
+          process = subprocess.Popen(
+              ["docker", "compose", "--env-file", ".env.example", "run", "--rm", "--no-deps", "-T", "mcp"],
+              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+          selector = selectors.DefaultSelector()
+          selector.register(process.stdout, selectors.EVENT_READ)
+          def send(message):
+              process.stdin.write(json.dumps(message) + "\n")
+              process.stdin.flush()
+          def receive(request_id):
+              deadline = time.monotonic() + 60
+              while time.monotonic() < deadline:
+                  if not selector.select(max(0, deadline - time.monotonic())):
+                      break
+                  line = process.stdout.readline()
+                  if not line:
+                      raise RuntimeError("MCP exited before response")
+                  message = json.loads(line)
+                  if message.get("id") == request_id:
+                      assert "error" not in message, message
+                      return message["result"]
+              raise TimeoutError("MCP response timeout")
+          try:
+              send({"jsonrpc":"2.0", "id":1, "method":"initialize", "params":{
+                  "protocolVersion":"2025-11-25", "capabilities":{},
+                  "clientInfo":{"name":"ownstate-ci", "version":"1"}}})
+              assert "tools" in receive(1)["capabilities"]
+              send({"jsonrpc":"2.0", "method":"notifications/initialized"})
+              send({"jsonrpc":"2.0", "id":2, "method":"tools/list", "params":{}})
+              tools = receive(2)["tools"]
+              assert any(tool["name"] == "bootstrap_project" for tool in tools)
+              print("MCP initialize and tool discovery passed")
+          finally:
+              selector.close()
+              process.stdin.close()
+              try:
+                  process.wait(timeout=15)
+              except subprocess.TimeoutExpired:
+                  process.kill()
+                  process.wait()
+          PY
+      - name: Show container diagnostics on failure
+        if: failure()
+        run: |
+          docker compose --env-file .env.example ps -a
+          docker compose --env-file .env.example logs --no-color --tail 100
+      - name: Remove this CI job's disposable containers and volumes
+        if: always()
+        run: docker compose --env-file .env.example --profile mcp down --volumes --remove-orphans

@@ -1,0 +1,23 @@
+[package]
+name = "ownstate-worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["fastembed"]
+fastembed = ["ownstate-runtime/fastembed"]
+
+[dependencies]
+ownstate-domain = { workspace = true }
+ownstate-runtime = { workspace = true }
+ownstate-services = { workspace = true }
+
+dotenvy = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,27 @@
+[package]
+name = "ownstate-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Compile the local ONNX embedding model into binaries built through this crate.
+fastembed = ["ownstate-embeddings/fastembed"]
+
+[dependencies]
+ownstate-domain = { workspace = true }
+ownstate-embeddings = { workspace = true }
+ownstate-services = { workspace = true }
+ownstate-storage = { workspace = true }
+
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CHANGES_DIR="${ROOT_DIR}/openspec/changes"
+ARCHIVE_DIR="${ROOT_DIR}/openspec/archive"
+CURRENT_FILE="${ROOT_DIR}/.opsx-current"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./opsx propose "description of intent"
+  ./opsx apply
+  ./opsx archive
+
+Optional:
+  OPSX_CHANGE_ID=<change-id> ./opsx apply
+  OPSX_CHANGE_ID=<change-id> ./opsx archive
+EOF
+}
+
+slugify() {
+  local input="$1"
+  local slug
+  slug="$(printf '%s' "${input}" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-{2,}/-/g')"
+  if [[ -z "${slug}" ]]; then
+    slug="change-$(date +%Y%m%d%H%M%S)"
+  fi
+  printf '%s' "${slug}"
+}
+
+ensure_change_dir() {
+  mkdir -p "${CHANGES_DIR}"
+  mkdir -p "${ARCHIVE_DIR}"
+}
+
+latest_change_id() {
+  if [[ -n "${OPSX_CHANGE_ID:-}" && -d "${CHANGES_DIR}/${OPSX_CHANGE_ID}" ]]; then
+    printf '%s' "${OPSX_CHANGE_ID}"
+    return 0
+  fi
+
+  if [[ -f "${CURRENT_FILE}" ]]; then
+    local current
+    current="$(cat "${CURRENT_FILE}")"
+    if [[ -n "${current}" && -d "${CHANGES_DIR}/${current}" ]]; then
+      printf '%s' "${current}"
+      return 0
+    fi
+  fi
+
+  local newest
+  newest="$(
+    find "${CHANGES_DIR}" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null \
+      | xargs -I{} stat -f "%m %N" {} 2>/dev/null \
+      | sort -nr \
+      | head -n1 \
+      | cut -d' ' -f2-
+  )"
+
+  if [[ -n "${newest}" ]]; then
+    basename "${newest}"
+    return 0
+  fi
+
+  return 1
+}
+
+write_current_change() {
+  local change_id="$1"
+  printf '%s' "${change_id}" > "${CURRENT_FILE}"
+}
+
+ensure_change_files() {
+  local change_dir="$1"
+  local date_now="$2"
+
+  if [[ ! -f "${change_dir}/.openspec.yaml" ]]; then
+    cat > "${change_dir}/.openspec.yaml" <<EOF
+schema: spec-driven
+created: ${date_now}
+EOF
+  fi
+
+  if [[ ! -f "${change_dir}/proposal.md" ]]; then
+    cat > "${change_dir}/proposal.md" <<'EOF'
+## Why
+
+- TODO
+
+## What Changes
+
+- TODO
+
+## Impact
+
+- TODO
+EOF
+  fi
+
+  if [[ ! -f "${change_dir}/tasks.md" ]]; then
+    cat > "${change_dir}/tasks.md" <<'EOF'
+- [ ] Define implementation tasks
+EOF
+  fi
+}
+
+append_apply_log() {
+  local change_dir="$1"
+  local tasks_file="${change_dir}/tasks.md"
+  local timestamp
+  local changed_files
+  local changed_count
+
+  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  changed_files="$(git -C "${ROOT_DIR}" diff --name-only --relative 2>/dev/null || true)"
+  changed_count="$(printf '%s\n' "${changed_files}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+
+  {
+    printf '\n## Applied Updates\n'
+    printf '\n### %s\n' "${timestamp}"
+    if [[ "${changed_count}" -eq 0 ]]; then
+      printf -- '- (no local file changes detected)\n'
+    else
+      printf '%s\n' "${changed_files}" | sed '/^[[:space:]]*$/d; s/^/- /'
+    fi
+  } >> "${tasks_file}"
+}
+
+cmd="${1:-}"
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+ensure_change_dir
+
+case "${cmd}" in
+  propose)
+    if [[ $# -eq 0 ]]; then
+      echo "Error: missing proposal description."
+      usage
+      exit 1
+    fi
+
+    description="$*"
+    base_slug="$(slugify "${description}")"
+    change_id="${base_slug}"
+    suffix=2
+
+    while [[ -d "${CHANGES_DIR}/${change_id}" ]]; do
+      change_id="${base_slug}-${suffix}"
+      suffix=$((suffix + 1))
+    done
+
+    change_dir="${CHANGES_DIR}/${change_id}"
+    mkdir -p "${change_dir}"
+    today="$(date +%F)"
+    ensure_change_files "${change_dir}" "${today}"
+
+    cat > "${change_dir}/proposal.md" <<EOF
+## Why
+
+- ${description}
+
+## What Changes
+
+- Define and implement the requested update.
+
+## Impact
+
+- Keeps OpenSpec history aligned with implementation work.
+EOF
+
+    write_current_change "${change_id}"
+    echo "Created OpenSpec change: ${change_id}"
+    echo "Path: ${change_dir}"
+    ;;
+
+  apply)
+    if ! change_id="$(latest_change_id)"; then
+      echo "Error: no OpenSpec change found. Run './opsx propose \"...\"' first."
+      exit 1
+    fi
+
+    change_dir="${CHANGES_DIR}/${change_id}"
+    today="$(date +%F)"
+    ensure_change_files "${change_dir}" "${today}"
+    append_apply_log "${change_dir}"
+    write_current_change "${change_id}"
+    echo "Applied OpenSpec update to: ${change_id}"
+    ;;
+
+  archive)
+    if ! change_id="$(latest_change_id)"; then
+      echo "Error: no OpenSpec change found to archive."
+      exit 1
+    fi
+
+    source_dir="${CHANGES_DIR}/${change_id}"
+    if [[ ! -d "${source_dir}" ]]; then
+      echo "Error: change does not exist: ${change_id}"
+      exit 1
+    fi
+
+    target_dir="${ARCHIVE_DIR}/${change_id}"
+    if [[ -e "${target_dir}" ]]; then
+      target_dir="${ARCHIVE_DIR}/${change_id}-$(date +%Y%m%d%H%M%S)"
+    fi
+
+    mv "${source_dir}" "${target_dir}"
+
+    if [[ -f "${CURRENT_FILE}" ]] && [[ "$(cat "${CURRENT_FILE}")" == "${change_id}" ]]; then
+      rm -f "${CURRENT_FILE}"
+    fi
+
+    echo "Archived OpenSpec change: ${change_id}"
+    echo "Path: ${target_dir}"
+    ;;
+
+  ""|-h|--help|help)
+    usage
+    ;;
+
+  *)
+    echo "Error: unknown command '${cmd}'."
+    usage
+    exit 1
+    ;;
+esac
+

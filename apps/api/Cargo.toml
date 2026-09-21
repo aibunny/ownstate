@@ -1,0 +1,35 @@
+[package]
+name = "ownstate-api"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["fastembed"]
+fastembed = ["ownstate-runtime/fastembed"]
+
+[dependencies]
+ownstate-domain = { workspace = true }
+ownstate-runtime = { workspace = true }
+ownstate-services = { workspace = true }
+
+axum = { workspace = true }
+dotenvy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+sqlx = { workspace = true }
+uuid = { workspace = true }
+ownstate-embeddings = { workspace = true }
+ownstate-storage = { workspace = true, features = ["test-support"] }
+http-body-util = "0.1"
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,95 @@
+x-runtime-environment: &runtime-environment
+  # Native .env uses localhost; containers reach PostgreSQL by service name.
+  OWNSTATE_DATABASE_URL: ${OWNSTATE_CONTAINER_DATABASE_URL:-postgres://ownstate:ownstate_dev@postgres:5432/ownstate}
+  OWNSTATE_TENANT_ID: ${OWNSTATE_TENANT_ID:-00000000-0000-0000-0000-000000000001}
+  OWNSTATE_DEPLOYMENT_MODE: ${OWNSTATE_DEPLOYMENT_MODE:-personal}
+  OWNSTATE_MAX_CLASSIFICATION: ${OWNSTATE_MAX_CLASSIFICATION:-CONFIDENTIAL}
+  OWNSTATE_EMBEDDING_PROVIDER: ${OWNSTATE_EMBEDDING_PROVIDER:-fastembed}
+  OWNSTATE_EMBEDDING_CACHE_DIR: /app/.fastembed_cache
+  OWNSTATE_MAX_DB_CONNECTIONS: ${OWNSTATE_MAX_DB_CONNECTIONS:-10}
+  OWNSTATE_WORKER_POLL_MS: ${OWNSTATE_WORKER_POLL_MS:-1000}
+  RUST_LOG: ${RUST_LOG:-info}
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: ${OWNSTATE_POSTGRES_CONTAINER_NAME:-ownstate-postgres}
+    environment:
+      POSTGRES_USER: ownstate
+      POSTGRES_PASSWORD: ownstate_dev
+      POSTGRES_DB: ownstate
+    ports:
+      - "127.0.0.1:${OWNSTATE_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ownstate-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ownstate -d ownstate"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      target: api
+      args:
+        OWNSTATE_FASTEMBED: ${OWNSTATE_IMAGE_FASTEMBED:-true}
+    init: true
+    environment:
+      <<: *runtime-environment
+      OWNSTATE_HTTP_ADDR: 0.0.0.0:8080
+      OWNSTATE_API_TOKEN: ${OWNSTATE_API_TOKEN:-}
+      OWNSTATE_ADMIN_TOKEN: ${OWNSTATE_ADMIN_TOKEN:-}
+      OWNSTATE_AUTO_MIGRATE: ${OWNSTATE_AUTO_MIGRATE:-true}
+    ports:
+      - "127.0.0.1:${OWNSTATE_HTTP_PORT:-8080}:8080"
+    volumes:
+      - ownstate-model-cache:/app/.fastembed_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  worker:
+    build:
+      context: .
+      target: worker
+      args:
+        OWNSTATE_FASTEMBED: ${OWNSTATE_IMAGE_FASTEMBED:-true}
+    init: true
+    environment:
+      <<: *runtime-environment
+      OWNSTATE_AUTO_MIGRATE: "false"
+      OWNSTATE_WORKER_TOKEN: ${OWNSTATE_WORKER_TOKEN:-}
+    volumes:
+      - ownstate-model-cache:/app/.fastembed_cache
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  # MCP is a stdio server started by its client, not a network daemon.
+  mcp:
+    profiles: [mcp]
+    build:
+      context: .
+      target: mcp
+      args:
+        OWNSTATE_FASTEMBED: ${OWNSTATE_IMAGE_FASTEMBED:-true}
+    init: true
+    stdin_open: true
+    tty: false
+    environment:
+      <<: *runtime-environment
+      OWNSTATE_AUTO_MIGRATE: "false"
+      OWNSTATE_MCP_TOKEN: ${OWNSTATE_MCP_TOKEN:-}
+    volumes:
+      - ownstate-model-cache:/app/.fastembed_cache
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 10s
+
+volumes:
+  ownstate-pgdata:
+  ownstate-model-cache:

@@ -1,0 +1,29 @@
+[package]
+name = "ownstate-services"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+ownstate-domain = { workspace = true }
+ownstate-embeddings = { workspace = true }
+ownstate-storage = { workspace = true }
+
+chrono = { workspace = true }
+pgvector = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+ownstate-storage = { workspace = true, features = ["test-support"] }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

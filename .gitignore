@@ -1,0 +1,6 @@
+/target
+.env
+.fastembed_cache/
+*.log
+.DS_Store
+.opsx-current
