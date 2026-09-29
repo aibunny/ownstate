@@ -25,7 +25,9 @@ credentials, attach persistent volumes, and deploy the stack.
 
 The first API and worker starts can take several minutes while each service
 downloads the local Fastembed model. The model caches are stored on persistent
-volumes so later deployments can reuse them.
+volumes so later deployments can reuse them. The Railway image initializes the
+cache mount while privileged, then permanently drops to the dedicated
+`ownstate` user before starting the selected process.
 
 After deployment:
 
