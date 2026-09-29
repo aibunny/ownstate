@@ -144,10 +144,22 @@ impl Config {
                 "OWNSTATE_MAX_CLASSIFICATION must be PUBLIC, INTERNAL, CONFIDENTIAL, RESTRICTED or SECRET"))?,
             None => SecurityClassification::Confidential,
         };
-        let http_addr = env("OWNSTATE_HTTP_ADDR")
-            .unwrap_or_else(|| "127.0.0.1:8080".into())
-            .parse::<SocketAddr>()
-            .map_err(|_| invalid("OWNSTATE_HTTP_ADDR must be an IP socket address"))?;
+        let http_addr = match env("OWNSTATE_HTTP_ADDR") {
+            Some(raw) => raw
+                .parse::<SocketAddr>()
+                .map_err(|_| invalid("OWNSTATE_HTTP_ADDR must be an IP socket address"))?,
+            None => match env("PORT") {
+                Some(raw) => {
+                    let port = raw
+                        .parse::<u16>()
+                        .ok()
+                        .filter(|port| *port > 0)
+                        .ok_or_else(|| invalid("PORT must be an integer from 1 to 65535"))?;
+                    SocketAddr::from(([0, 0, 0, 0], port))
+                }
+                None => SocketAddr::from(([127, 0, 0, 1], 8080)),
+            },
+        };
         let auto_migrate = match env("OWNSTATE_AUTO_MIGRATE").as_deref() {
             None | Some("true" | "1") => true,
             Some("false" | "0") => false,
@@ -249,6 +261,8 @@ mod config_tests {
             ("OWNSTATE_MAX_DB_CONNECTIONS", "4294967296"),
             ("OWNSTATE_AUTO_MIGRATE", "tru"),
             ("OWNSTATE_HTTP_ADDR", "not-a-bind-address"),
+            ("PORT", "0"),
+            ("PORT", "not-a-port"),
             ("OWNSTATE_EMBEDDING_PROVIDER", "private-config-value"),
             ("OWNSTATE_MAX_CLASSIFICATION", "private-config-value"),
             ("OWNSTATE_DEPLOYMENT_MODE", "private-config-value"),
@@ -292,5 +306,15 @@ mod config_tests {
         ] {
             assert!(!debug.contains(secret));
         }
+    }
+
+    #[test]
+    fn railway_port_is_used_only_when_ownstate_address_is_absent() {
+        let railway = config(&[("PORT", "4321")]).unwrap();
+        assert_eq!(railway.http_addr, SocketAddr::from(([0, 0, 0, 0], 4321)));
+
+        let explicit =
+            config(&[("PORT", "4321"), ("OWNSTATE_HTTP_ADDR", "127.0.0.1:8765")]).unwrap();
+        assert_eq!(explicit.http_addr, SocketAddr::from(([127, 0, 0, 1], 8765)));
     }
 }

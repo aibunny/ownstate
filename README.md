@@ -92,13 +92,23 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture.
 ## Quick start
 
 ```bash
-git clone https://github.com/anthropics/ownstate.git
+git clone https://github.com/aibunny/ownstate.git
 cd ownstate
 cp .env.example .env
 docker compose up --build
 ```
 
 The first startup downloads the Fastembed ONNX model (~50MB). Subsequent starts use the cached model.
+
+### Deploy on Railway
+
+The Railway template deploys a public Ownstate API, a private worker, and a
+private PostgreSQL 18 database with pgvector. It generates the database, API,
+and admin credentials and attaches persistent database and model-cache volumes.
+
+The one-click deployment button will appear here after the template is
+published. See [docs/RAILWAY.md](docs/RAILWAY.md) for the service contract,
+security settings, verification, backups, and manual setup.
 
 **Verify it's running:**
 
@@ -129,6 +139,7 @@ Key configuration variables:
 |----------|---------|-------------|
 | `OWNSTATE_DATABASE_URL` | `postgres://ownstate:ownstate_dev@127.0.0.1:5432/ownstate` | PostgreSQL connection |
 | `OWNSTATE_HTTP_ADDR` | `127.0.0.1:8080` | API bind address |
+| `PORT` | (unset) | Platform port; used as `0.0.0.0:$PORT` only when `OWNSTATE_HTTP_ADDR` is unset |
 | `OWNSTATE_DEPLOYMENT_MODE` | `personal` | `personal` or `business` |
 | `OWNSTATE_API_TOKEN` | (unset) | Bearer token for API auth |
 | `OWNSTATE_EMBEDDING_PROVIDER` | `fastembed` | `fastembed` or `deterministic` |
@@ -162,6 +173,7 @@ docker compose --profile mcp up --build mcp
 | `api` | HTTP API server |
 | `worker` | Background job processor |
 | `mcp` | MCP protocol server |
+| `railway` | Unified Railway image; `OWNSTATE_PROCESS` selects `api`, `worker`, or `mcp` |
 
 Build without Fastembed (smaller image, no model download):
 

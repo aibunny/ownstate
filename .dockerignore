@@ -11,7 +11,8 @@ target
 .DS_Store
 openspec
 docs
-scripts
+scripts/*
+!scripts/railway-entrypoint.sh
 .github
 .opsx-current
 STATE.md

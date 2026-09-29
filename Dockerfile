@@ -54,3 +54,17 @@ EXPOSE 8080
 HEALTHCHECK --interval=5s --timeout=3s --start-period=300s --retries=60 \
     CMD curl --fail --silent http://127.0.0.1:8080/ready || exit 1
 ENTRYPOINT ["/usr/local/bin/ownstate-api"]
+
+# Railway builds the final stage once for both the public API and private
+# worker services. OWNSTATE_PROCESS selects the process at runtime.
+FROM runtime AS railway
+COPY --from=builder /out/ownstate-api /usr/local/bin/ownstate-api
+COPY --from=builder /out/ownstate-worker /usr/local/bin/ownstate-worker
+COPY --from=builder /out/ownstate-mcp /usr/local/bin/ownstate-mcp
+COPY --chmod=0755 scripts/railway-entrypoint.sh /usr/local/bin/ownstate-railway
+ENV OWNSTATE_PROCESS=api
+EXPOSE 8080
+STOPSIGNAL SIGINT
+HEALTHCHECK --interval=5s --timeout=3s --start-period=300s --retries=60 \
+    CMD curl --fail --silent "http://127.0.0.1:${PORT:-8080}/ready" || exit 1
+ENTRYPOINT ["/usr/local/bin/ownstate-railway"]
