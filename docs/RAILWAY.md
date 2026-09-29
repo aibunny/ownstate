@@ -58,7 +58,7 @@ public network service by this template.
 The published template is expected to keep this exact topology. If you create
 the services manually, use these settings.
 
-### `Postgres`
+### `pgvector`
 
 | Setting | Value |
 |---|---|
@@ -95,7 +95,7 @@ Variables:
 
 ```text
 OWNSTATE_PROCESS=api
-OWNSTATE_DATABASE_URL=${{Postgres.DATABASE_URL}}
+OWNSTATE_DATABASE_URL=${{pgvector.DATABASE_URL}}
 OWNSTATE_DEPLOYMENT_MODE=personal
 OWNSTATE_API_TOKEN=${{secret(48)}}
 OWNSTATE_ADMIN_TOKEN=${{secret(48)}}
@@ -124,7 +124,7 @@ Variables:
 
 ```text
 OWNSTATE_PROCESS=worker
-OWNSTATE_DATABASE_URL=${{Postgres.DATABASE_URL}}
+OWNSTATE_DATABASE_URL=${{pgvector.DATABASE_URL}}
 OWNSTATE_API_SERVICE_HOST=${{API.RAILWAY_PRIVATE_DOMAIN}}
 OWNSTATE_DEPLOYMENT_MODE=personal
 OWNSTATE_MAX_CLASSIFICATION=CONFIDENTIAL

@@ -106,9 +106,10 @@ The Railway template deploys a public Ownstate API, a private worker, and a
 private PostgreSQL 18 database with pgvector. It generates the database, API,
 and admin credentials and attaches persistent database and model-cache volumes.
 
-The one-click deployment button will appear here after the template is
-published. See [docs/RAILWAY.md](docs/RAILWAY.md) for the service contract,
-security settings, verification, backups, and manual setup.
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template/I1rrPB?utm_medium=integration&utm_source=button&utm_campaign=generic)
+
+See [docs/RAILWAY.md](docs/RAILWAY.md) for the service contract, security
+settings, verification, backups, and manual setup.
 
 **Verify it's running:**
 
