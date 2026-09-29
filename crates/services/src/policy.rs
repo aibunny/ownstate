@@ -177,7 +177,10 @@ impl AppServices {
         let mcp = policy::bootstrap_service_policy(
             self.pool(),
             self.tenant_id(),
-            "mcp",
+            // Service policy grants are immutable by design. Version the MCP
+            // identity when its grant contract changes so existing installs
+            // can upgrade without mutating or broadening an older principal.
+            "mcp-capture-v1",
             &service_spec(vec![
                 PolicyAction::CreateProject,
                 PolicyAction::ReadProject,
