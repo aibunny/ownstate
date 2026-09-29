@@ -24,7 +24,7 @@ RUN case "$OWNSTATE_FASTEMBED" in \
 
 FROM debian:trixie-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl libssl3t64 libstdc++6 libgomp1 \
+    ca-certificates curl gosu libssl3t64 libstdc++6 libgomp1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 ownstate \
     && useradd --uid 10001 --gid ownstate --no-create-home --home-dir /app ownstate \
@@ -55,6 +55,7 @@ ENTRYPOINT ["/usr/local/bin/ownstate-api"]
 # Railway builds the final stage once for both the public API and private
 # worker services. OWNSTATE_PROCESS selects the process at runtime.
 FROM runtime AS railway
+USER root
 COPY --from=builder /out/ownstate-api /usr/local/bin/ownstate-api
 COPY --from=builder /out/ownstate-worker /usr/local/bin/ownstate-worker
 COPY --from=builder /out/ownstate-mcp /usr/local/bin/ownstate-mcp
