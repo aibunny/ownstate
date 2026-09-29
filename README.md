@@ -143,6 +143,7 @@ Key configuration variables:
 | `PORT` | (unset) | Platform port; used as `0.0.0.0:$PORT` only when `OWNSTATE_HTTP_ADDR` is unset |
 | `OWNSTATE_DEPLOYMENT_MODE` | `personal` | `personal` or `business` |
 | `OWNSTATE_API_TOKEN` | (unset) | Bearer token for API auth |
+| `OWNSTATE_MCP_TOKEN` | (unset) | Dedicated bearer token enabling authenticated `/mcp` |
 | `OWNSTATE_EMBEDDING_PROVIDER` | `fastembed` | `fastembed` or `deterministic` |
 | `OWNSTATE_AUTO_MIGRATE` | `true` | Run migrations on startup |
 

@@ -27,7 +27,7 @@ async fn fixture() -> (
         TenantId::generate(),
     ));
     let owner = app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -392,7 +392,7 @@ async fn evidence_and_assertion_endpoints_cannot_cross_project_or_tenant() {
         TenantId::generate(),
     ));
     let foreign_owner = foreign_app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -412,7 +412,7 @@ async fn evidence_and_assertion_endpoints_cannot_cross_project_or_tenant() {
         .with_max_classification(SecurityClassification::Public),
     );
     let limited_owner = limited_app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -671,7 +671,7 @@ async fn lower_classification_cannot_change_restricted_identity_or_its_trust() {
         .with_max_classification(SecurityClassification::Secret),
     );
     let elevated_owner = elevated_app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -808,7 +808,7 @@ async fn inactive_restricted_identity_retains_identifiers_and_cannot_be_recreate
         .with_max_classification(SecurityClassification::Secret),
     );
     let elevated_owner = elevated_app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -1018,7 +1018,7 @@ async fn claim_and_relationship_lifecycle_cannot_be_bypassed_by_reproposing_the_
         .with_max_classification(SecurityClassification::Secret),
     );
     let elevated_owner = elevated_app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;

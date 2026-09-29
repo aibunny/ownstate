@@ -19,7 +19,7 @@ pub struct TestServices {
 impl TestServices {
     pub async fn from_app(app: Arc<AppServices>) -> Self {
         let owner = app
-            .bootstrap_personal_policy_actors(None, None)
+            .bootstrap_personal_policy_actors(None, None, None)
             .await
             .unwrap()
             .owner;

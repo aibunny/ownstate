@@ -127,7 +127,7 @@ async fn project_scope_and_model_permissions_deny_before_embedding() {
     let provider = Arc::new(CountingProvider::new());
     let app = Arc::new(AppServices::new(db.pool.clone(), provider.clone(), tenant));
     let owner = app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -173,7 +173,7 @@ async fn revocation_during_embedding_suppresses_the_final_read() {
     let provider = Arc::new(BlockingProvider::new());
     let app = Arc::new(AppServices::new(db.pool.clone(), provider.clone(), tenant));
     let owner = app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -227,7 +227,7 @@ async fn child_services_require_bound_execution_and_explicit_attenuation() {
         tenant,
     ));
     let owner = app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;

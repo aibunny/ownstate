@@ -26,7 +26,7 @@ async fn setup() -> (Arc<AppServices>, PrincipalServices, TestDb) {
         TenantId::from_uuid(uuid::Uuid::from_u128(1)),
     ));
     let owner = app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -118,7 +118,7 @@ async fn mcp_client_retrieves_the_same_knowledge_as_http_services() {
             git_origin: Some("https://github.com/example/mcp-workspace-project.git".to_string()),
         };
         let actors = server_services
-            .bootstrap_personal_policy_actors(None, None)
+            .bootstrap_personal_policy_actors(None, None, None)
             .await
             .unwrap();
         let scoped = server_services.for_principal(actors.mcp).unwrap();

@@ -24,7 +24,7 @@ async fn fixture() -> (
         TenantId::generate(),
     ));
     let owner = app
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -463,7 +463,7 @@ async fn exact_structured_queries_need_no_model_and_wrong_scope_is_denied_before
         _app.tenant_id(),
     ));
     let owner2 = app2
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;

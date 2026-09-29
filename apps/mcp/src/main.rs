@@ -23,7 +23,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let principal = match config.deployment_mode {
         DeploymentMode::Personal => {
             services
-                .bootstrap_personal_policy_actors(None, None)
+                .bootstrap_personal_policy_actors(None, None, config.mcp_token.as_deref())
                 .await?
                 .mcp
         }

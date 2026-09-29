@@ -41,3 +41,30 @@ pub async fn require_bearer(
             .into_response(),
     }
 }
+
+/// Require the dedicated MCP credential on every Streamable HTTP request.
+/// API and admin credentials are deliberately rejected at this boundary.
+pub async fn require_mcp_bearer(
+    State(state): State<AppState>,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    let expected = state.mcp_principal.as_ref().map(|principal| principal.id());
+    let principal = match bearer_hash(request.headers()) {
+        Some(digest) => state.services.authenticate_digest(&digest).await.ok(),
+        None => None,
+    };
+    match (principal, expected) {
+        (Some(principal), Some(expected)) if principal.id() == expected => {
+            request.extensions_mut().insert(principal);
+            next.run(request).await
+        }
+        _ => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": { "code": "unauthorized", "message": "missing or invalid MCP bearer token" }
+            })),
+        )
+            .into_response(),
+    }
+}

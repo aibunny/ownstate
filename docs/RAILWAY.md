@@ -32,9 +32,9 @@ cache mount while privileged, then permanently drops to the dedicated
 After deployment:
 
 1. Open the `API` service and copy its public Railway domain.
-2. Open the `API` service variables and copy `OWNSTATE_API_TOKEN` into a secret
-   manager. Do the same with `OWNSTATE_ADMIN_TOKEN`; keep the admin token away
-   from routine agent integrations.
+2. Open the `API` service variables and copy `OWNSTATE_API_TOKEN` and
+   `OWNSTATE_MCP_TOKEN` into a secret manager. Do the same with
+   `OWNSTATE_ADMIN_TOKEN`; keep the admin token away from agent integrations.
 3. Verify the unauthenticated liveness and readiness endpoints:
 
    ```bash
@@ -49,9 +49,9 @@ After deployment:
      https://YOUR-DOMAIN/projects
    ```
 
-The Railway deployment exposes Ownstate's HTTP API. The current MCP binary is a
-stdio process and is started by a local MCP client; it is not exposed as a
-public network service by this template.
+The API service exposes authenticated Streamable HTTP MCP at
+`https://YOUR-DOMAIN/mcp`. It accepts only `OWNSTATE_MCP_TOKEN`; API and admin
+tokens are rejected. PostgreSQL remains private.
 
 ## Template service contract
 
@@ -99,6 +99,7 @@ OWNSTATE_DATABASE_URL=${{pgvector.DATABASE_URL}}
 OWNSTATE_DEPLOYMENT_MODE=personal
 OWNSTATE_API_TOKEN=${{secret(48)}}
 OWNSTATE_ADMIN_TOKEN=${{secret(48)}}
+OWNSTATE_MCP_TOKEN=${{secret(48)}}
 OWNSTATE_MAX_CLASSIFICATION=CONFIDENTIAL
 OWNSTATE_EMBEDDING_PROVIDER=fastembed
 OWNSTATE_EMBEDDING_CACHE_DIR=/app/.fastembed_cache

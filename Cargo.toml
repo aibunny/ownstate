@@ -20,6 +20,7 @@ publish = false
 
 [workspace.dependencies]
 ownstate-domain = { path = "crates/domain" }
+ownstate-mcp = { path = "apps/mcp" }
 ownstate-runtime = { path = "crates/runtime" }
 ownstate-storage = { path = "crates/storage" }
 ownstate-embeddings = { path = "crates/embeddings" }
@@ -33,7 +34,7 @@ chrono = { version = "0.4", features = ["serde"] }
 dotenvy = "0.15"
 fastembed = "6"
 pgvector = { version = "0.4", features = ["sqlx"] }
-rmcp = { version = "3.2", features = ["transport-io", "schemars"] }
+rmcp = { version = "3.2", features = ["transport-io", "transport-streamable-http-server", "schemars"] }
 schemars = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

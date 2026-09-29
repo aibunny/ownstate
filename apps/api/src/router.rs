@@ -2,9 +2,11 @@ use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::middleware;
 use axum::routing::{get, post};
+use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
 use tower_http::trace::TraceLayer;
 
-use crate::auth::require_bearer;
+use crate::auth::{require_bearer, require_mcp_bearer};
 use crate::handlers;
 use crate::state::AppState;
 
@@ -61,11 +63,35 @@ pub fn build(state: AppState) -> Router {
             require_bearer,
         ));
 
-    Router::new()
+    let mut app = Router::new()
         .route("/health", get(handlers::health))
         .route("/ready", get(handlers::ready))
-        .merge(protected)
-        .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .merge(protected);
+
+    if let Some(principal) = state.mcp_principal.clone() {
+        let scoped = state
+            .services
+            .for_principal(principal)
+            .expect("validated MCP principal must belong to the API tenant");
+        let service: StreamableHttpService<ownstate_mcp::OwnstateMcp, LocalSessionManager> =
+            StreamableHttpService::new(
+                move || Ok(ownstate_mcp::OwnstateMcp::new(scoped.clone(), None)),
+                Default::default(),
+                StreamableHttpServerConfig::default()
+                    .with_allowed_hosts(state.mcp_allowed_hosts.clone())
+                    .with_max_request_body_bytes(MAX_BODY_BYTES),
+            );
+        let mcp =
+            Router::new()
+                .nest_service("/mcp", service)
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    require_mcp_bearer,
+                ));
+        app = app.merge(mcp);
+    }
+
+    app.layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         // Span carries method + path only: query strings hold user text
         // (e.g. /knowledge/search?q=...) which must not reach logs.
         .layer(TraceLayer::new_for_http().make_span_with(

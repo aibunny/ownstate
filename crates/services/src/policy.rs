@@ -116,6 +116,7 @@ impl AppServices {
         &self,
         api_digest: Option<&str>,
         admin_digest: Option<&str>,
+        mcp_digest: Option<&str>,
     ) -> ServiceResult<PersonalPolicyActors> {
         let owner = policy::bootstrap_personal_policy(self.pool(), self.tenant_id()).await?;
         let service_spec = |actions: Vec<PolicyAction>| GrantSpec {
@@ -180,6 +181,9 @@ impl AppServices {
             &service_spec(vec![
                 PolicyAction::CreateProject,
                 PolicyAction::ReadProject,
+                PolicyAction::CreateSession,
+                PolicyAction::ReadEvidence,
+                PolicyAction::AppendEvidence,
                 PolicyAction::ReadKnowledge,
                 PolicyAction::CompileContext,
                 PolicyAction::ProposeKnowledge,
@@ -233,6 +237,16 @@ impl AppServices {
                     .await?;
                 }
             }
+        }
+        if let Some(hash) = mcp_digest {
+            policy::register_credential(
+                self.pool(),
+                CredentialId::generate(),
+                &mcp.principal,
+                hash,
+                None,
+            )
+            .await?;
         }
         Ok(PersonalPolicyActors {
             owner: owner.principal,

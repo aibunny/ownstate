@@ -25,6 +25,14 @@ async fn app_with_admin(
     api_token: Option<&str>,
     admin_token: Option<&str>,
 ) -> (Router, Arc<AppServices>, TestDb) {
+    app_with_tokens(api_token, admin_token, None).await
+}
+
+async fn app_with_tokens(
+    api_token: Option<&str>,
+    admin_token: Option<&str>,
+    mcp_token: Option<&str>,
+) -> (Router, Arc<AppServices>, TestDb) {
     let db = fresh_db().await.unwrap();
     let services = Arc::new(AppServices::new(
         db.pool.clone(),
@@ -35,10 +43,58 @@ async fn app_with_admin(
         services.clone(),
         api_token.map(String::from),
         admin_token.map(String::from),
+        mcp_token.map(String::from),
+        vec!["ownstate.test".to_string()],
     )
     .await
     .unwrap();
     (build_router(state), services, db)
+}
+
+#[tokio::test]
+async fn streamable_http_mcp_requires_only_the_dedicated_token() {
+    let (app, _services, _db) =
+        app_with_tokens(Some("api-token"), Some("admin-token"), Some("mcp-token")).await;
+    let initialize = || {
+        post(
+            "/mcp",
+            json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1"}
+                }
+            }),
+        )
+    };
+    let authorize = |mut request: Request<Body>, token: &str| {
+        request
+            .headers_mut()
+            .insert(header::HOST, "ownstate.test".parse().unwrap());
+        request.headers_mut().insert(
+            header::ACCEPT,
+            "application/json, text/event-stream".parse().unwrap(),
+        );
+        request.headers_mut().insert(
+            header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
+        request
+    };
+
+    assert_eq!(
+        send(&app, authorize(initialize(), "api-token")).await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (status, body) = send(&app, authorize(initialize(), "mcp-token")).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        body.to_string().contains("Ownstate is a persistent"),
+        "{body}"
+    );
 }
 
 async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Value) {
@@ -150,7 +206,7 @@ async fn institutional_http_routes_gate_curation_and_return_scoped_entities() {
     );
     assert_eq!(send(&app,authorized(get("/entities/00000000-0000-0000-0000-00000000dead?project_id=00000000-0000-0000-0000-00000000dead"),"reader")).await.0,StatusCode::NOT_FOUND);
     let owner = services
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -258,7 +314,7 @@ async fn request_identity_fields_are_rejected_and_business_has_no_fallback() {
         StatusCode::UNPROCESSABLE_ENTITY
     );
 
-    let business = build_router(AppState::business(services));
+    let business = build_router(AppState::business(services, None, Vec::new()));
     assert_eq!(
         send(&business, post("/projects", json!({"name": "no-fallback"})))
             .await
@@ -462,7 +518,7 @@ async fn full_flow_over_http() {
 
     // Process the embedding job (in production the worker does this).
     let owner = services
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
@@ -514,7 +570,7 @@ async fn full_flow_over_http() {
 async fn query_http_accepts_typed_reports_and_denies_sql_or_unauthenticated_plans() {
     let (app, services, _db) = app(Some("reader")).await;
     let owner = services
-        .bootstrap_personal_policy_actors(None, None)
+        .bootstrap_personal_policy_actors(None, None, None)
         .await
         .unwrap()
         .owner;
