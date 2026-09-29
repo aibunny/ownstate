@@ -14,10 +14,7 @@ COPY migrations ./migrations
 ARG OWNSTATE_FASTEMBED=true
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_INCREMENTAL=0
-RUN --mount=type=cache,id=ownstate-cargo-registry,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=ownstate-cargo-git,target=/usr/local/cargo/git \
-    --mount=type=cache,id=ownstate-cargo-target,target=/build/target \
-    case "$OWNSTATE_FASTEMBED" in \
+RUN case "$OWNSTATE_FASTEMBED" in \
       true) cargo build --locked --release -p ownstate-api -p ownstate-worker -p ownstate-mcp ;; \
       false) cargo build --locked --release --no-default-features -p ownstate-api -p ownstate-worker -p ownstate-mcp ;; \
       *) echo 'OWNSTATE_FASTEMBED must be true or false' >&2; exit 1 ;; \
