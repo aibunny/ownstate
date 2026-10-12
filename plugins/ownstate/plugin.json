@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "ownstate",
+  "version": "0.1.0",
+  "description": "Connect your personal or organization Ownstate knowledge to ChatGPT and Codex.",
+  "homepage": "https://api-production-8889.up.railway.app",
+  "repository": "https://github.com/aibunny/ownstate",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Ownstate",
+        "shortDescription": "Carry authorized context across AI work",
+        "developerName": "Ownstate",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write"],
+        "websiteURL": "https://api-production-8889.up.railway.app"
+      }
+    }
+  }
+}
