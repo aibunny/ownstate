@@ -194,25 +194,25 @@ fn request_from_same_origin(headers: &HeaderMap, expected_origin: &str) -> bool 
 #[cfg(test)]
 mod origin_tests {
     use super::request_from_same_origin;
-    use axum::http::{HeaderMap, header};
+    use axum::http::{HeaderMap, HeaderValue, header};
 
     const ORIGIN: &str = "https://api-production-8889.up.railway.app";
 
     #[test]
     fn accepts_matching_origin_or_same_origin_browser_metadata() {
         let mut headers = HeaderMap::new();
-        headers.insert(header::ORIGIN, ORIGIN.parse().unwrap());
+        headers.insert(header::ORIGIN, HeaderValue::from_static(ORIGIN));
         assert!(request_from_same_origin(&headers, ORIGIN));
 
         headers.remove(header::ORIGIN);
-        headers.insert("sec-fetch-site", "same-origin".parse().unwrap());
+        headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
         headers.insert(
             header::HOST,
-            "api-production-8889.up.railway.app".parse().unwrap(),
+            HeaderValue::from_static("api-production-8889.up.railway.app"),
         );
         assert!(request_from_same_origin(&headers, ORIGIN));
 
-        headers.insert(header::ORIGIN, "null".parse().unwrap());
+        headers.insert(header::ORIGIN, HeaderValue::from_static("null"));
         assert!(request_from_same_origin(&headers, ORIGIN));
     }
 
@@ -221,22 +221,25 @@ mod origin_tests {
         let mut headers = HeaderMap::new();
         headers.insert(
             header::HOST,
-            "api-production-8889.up.railway.app".parse().unwrap(),
+            HeaderValue::from_static("api-production-8889.up.railway.app"),
         );
         assert!(!request_from_same_origin(&headers, ORIGIN));
 
-        headers.insert("sec-fetch-site", "cross-site".parse().unwrap());
+        headers.insert("sec-fetch-site", HeaderValue::from_static("cross-site"));
         assert!(!request_from_same_origin(&headers, ORIGIN));
 
-        headers.insert("sec-fetch-site", "same-origin".parse().unwrap());
-        headers.insert(header::HOST, "attacker.example".parse().unwrap());
+        headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
+        headers.insert(header::HOST, HeaderValue::from_static("attacker.example"));
         assert!(!request_from_same_origin(&headers, ORIGIN));
 
         headers.insert(
             header::HOST,
-            "api-production-8889.up.railway.app".parse().unwrap(),
+            HeaderValue::from_static("api-production-8889.up.railway.app"),
         );
-        headers.insert(header::ORIGIN, "https://attacker.example".parse().unwrap());
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("https://attacker.example"),
+        );
         assert!(!request_from_same_origin(&headers, ORIGIN));
     }
 }
