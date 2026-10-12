@@ -167,7 +167,78 @@ pub(crate) fn same_origin(headers: &HeaderMap, state: &AppState) -> bool {
     let Some(config) = &state.signup_config else {
         return false;
     };
-    headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) == Some(config.origin.as_str())
+    request_from_same_origin(headers, &config.origin)
+}
+
+fn request_from_same_origin(headers: &HeaderMap, expected_origin: &str) -> bool {
+    let supplied_origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
+    if supplied_origin == Some(expected_origin) {
+        return true;
+    }
+    // Some browsers omit Origin (or send "null") for a form submitted from a
+    // page with a no-referrer policy. Fetch Metadata still identifies a real
+    // same-origin browser navigation; the Host check binds it to this site.
+    if supplied_origin.is_some_and(|origin| origin != "null") {
+        return false;
+    }
+    let Some((_, expected_host)) = expected_origin.split_once("://") else {
+        return false;
+    };
+    headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()) == Some("same-origin")
+        && headers
+            .get(header::HOST)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|host| host.eq_ignore_ascii_case(expected_host))
+}
+
+#[cfg(test)]
+mod origin_tests {
+    use super::request_from_same_origin;
+    use axum::http::{HeaderMap, header};
+
+    const ORIGIN: &str = "https://api-production-8889.up.railway.app";
+
+    #[test]
+    fn accepts_matching_origin_or_same_origin_browser_metadata() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::ORIGIN, ORIGIN.parse().unwrap());
+        assert!(request_from_same_origin(&headers, ORIGIN));
+
+        headers.remove(header::ORIGIN);
+        headers.insert("sec-fetch-site", "same-origin".parse().unwrap());
+        headers.insert(
+            header::HOST,
+            "api-production-8889.up.railway.app".parse().unwrap(),
+        );
+        assert!(request_from_same_origin(&headers, ORIGIN));
+
+        headers.insert(header::ORIGIN, "null".parse().unwrap());
+        assert!(request_from_same_origin(&headers, ORIGIN));
+    }
+
+    #[test]
+    fn rejects_cross_site_or_unidentified_requests() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::HOST,
+            "api-production-8889.up.railway.app".parse().unwrap(),
+        );
+        assert!(!request_from_same_origin(&headers, ORIGIN));
+
+        headers.insert("sec-fetch-site", "cross-site".parse().unwrap());
+        assert!(!request_from_same_origin(&headers, ORIGIN));
+
+        headers.insert("sec-fetch-site", "same-origin".parse().unwrap());
+        headers.insert(header::HOST, "attacker.example".parse().unwrap());
+        assert!(!request_from_same_origin(&headers, ORIGIN));
+
+        headers.insert(
+            header::HOST,
+            "api-production-8889.up.railway.app".parse().unwrap(),
+        );
+        headers.insert(header::ORIGIN, "https://attacker.example".parse().unwrap());
+        assert!(!request_from_same_origin(&headers, ORIGIN));
+    }
 }
 
 pub(crate) fn web_token(headers: &HeaderMap) -> Option<&str> {
