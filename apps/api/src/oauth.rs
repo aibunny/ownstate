@@ -46,7 +46,7 @@ pub async fn authorization_metadata(State(state): State<AppState>) -> Response {
 
 #[derive(Deserialize)]
 pub struct ClientRegistration {
-    client_name: String,
+    client_name: Option<String>,
     redirect_uris: Vec<String>,
     token_endpoint_auth_method: Option<String>,
 }
@@ -71,7 +71,10 @@ pub async fn register_client(
     }
     match state
         .services
-        .register_oauth_client(&input.client_name, input.redirect_uris)
+        .register_oauth_client(
+            input.client_name.as_deref().unwrap_or("MCP client"),
+            input.redirect_uris,
+        )
         .await
     {
         Ok(client) => (
