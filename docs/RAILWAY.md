@@ -59,9 +59,9 @@ user-owned connections; API and admin tokens are rejected. PostgreSQL remains pr
 The template above remains a single-user starting point. The API can also host
 the multi-user account site and OAuth MCP connections without changing the
 existing Personal worker or its credentials. After backing up the database and
-deploying the code with migrations 0013–0018, set these **API service**
-variables. Railway Hobby blocks outbound SMTP, so use a verified Resend domain
-and its HTTPS API on that plan:
+deploying the account migrations, set these **API service** variables. Railway
+Hobby blocks outbound SMTP, so use a verified Resend domain and its HTTPS API
+on that plan:
 
 ```text
 OWNSTATE_PUBLIC_URL=https://YOUR-DOMAIN
@@ -83,10 +83,12 @@ OWNSTATE_SMTP_PASSWORD=<set privately as a Railway secret>
 The API prefers Resend when `OWNSTATE_RESEND_API_KEY` is set. Otherwise it uses
 Lark STARTTLS on port 587. The account site remains disabled until the public
 URL and a supported email credential are configured. Railway Pro requires a
-redeploy after upgrade to allow SMTP. A new signup receives a new
-personal tenant; it does not take ownership of the original Personal mode
-tenant or its historical data. Keep the original deployment credentials until
-that ownership migration is planned and verified separately.
+redeploy after upgrade to allow SMTP. A new signup receives a new personal
+tenant; it does not automatically take ownership of the original Personal mode
+tenant or its historical data. A guarded one-time owner claim for the existing
+deployment is in `scripts/claim_legacy_personal_account.sql`; back up and
+verify the target account before using it. Keep the original deployment
+credentials until replacement account connections are verified.
 
 Users sign up at `/signup`, verify their email, and can create organizations and
 invite members from `/account`. The account page issues per-user manual MCP
@@ -95,6 +97,14 @@ through `/.well-known/oauth-protected-resource/mcp`. The authenticated
 `/capture/conversations` endpoint accepts events from local host adapters.
 See [the capture strategy](CHAT_CAPTURE_AND_MULTI_TENANT_STRATEGY.md) and
 [adapter setup](../integrations/README.md) for coverage and limitations.
+
+For Claude, add `https://YOUR-DOMAIN/mcp` as a custom Web connector. Choose
+**Sign in now** and **Register automatically** for the OAuth client, leave fixed
+request headers empty, then sign in to Ownstate and choose the intended space.
+The connector persists in the Claude account across chats; enable it for each
+conversation where it should be available. A manually copied token is a
+different connection route. Verify actual OAuth registration, authorization,
+token exchange, and refresh with the live client before calling this complete.
 
 Do not advertise the site or submit connector listings until email delivery,
 OAuth interoperability with each target client, broader traffic controls, backup/restore,

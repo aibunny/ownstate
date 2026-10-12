@@ -222,7 +222,7 @@ impl OwnstateMcp {
             ("required".to_string(), serde_json::json!(["id"])),
             ("additionalProperties".to_string(), serde_json::json!(false)),
         ])),
-        annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false),
+        annotations(title = "Identify Ownstate Connection", read_only_hint = true, destructive_hint = false, open_world_hint = false),
         meta = rmcp::model::MetaObject(serde_json::Map::from_iter([("openai/profile".to_string(), serde_json::Value::Bool(true))]))
     )]
     pub async fn get_profile(
@@ -238,7 +238,13 @@ impl OwnstateMcp {
     }
 
     #[tool(
-        description = "Append one observable event to a non-project chat. Reuse a stable conversation ID and event ID. MCP calls only capture what the client elects to send; they do not expose an entire chat transcript automatically."
+        description = "Append one observable event to a non-project chat. Reuse a stable conversation ID and event ID. MCP calls only capture what the client elects to send; they do not expose an entire chat transcript automatically.",
+        annotations(
+            title = "Record Chat Event",
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn record_conversation(
         &self,
@@ -306,7 +312,13 @@ impl OwnstateMcp {
     }
 
     #[tool(
-        description = "Get one current institutional entity with its exact version and provenance, scoped to the project."
+        description = "Get one current institutional entity with its exact version and provenance, scoped to the project.",
+        annotations(
+            title = "Get Institutional Entity",
+            read_only_hint = true,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn get_entity(
         &self,
@@ -332,7 +344,13 @@ impl OwnstateMcp {
     }
 
     #[tool(
-        description = "Get current institutional relationships involving one entity. Includes provenance and temporal validity."
+        description = "Get current institutional relationships involving one entity. Includes provenance and temporal validity.",
+        annotations(
+            title = "Get Entity Relationships",
+            read_only_hint = true,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn get_relationships(
         &self,
@@ -350,7 +368,13 @@ impl OwnstateMcp {
     }
 
     #[tool(
-        description = "Compile a budgeted current context packet for a task and record the exact canonical versions supplied."
+        description = "Compile a budgeted current context packet for a task and record the exact canonical versions supplied.",
+        annotations(
+            title = "Compile Project Context",
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn compile_context(
         &self,
@@ -419,7 +443,13 @@ impl OwnstateMcp {
         description = "Load a project's current knowledge state: summary counts plus the most \
                        recent ACTIVE knowledge with provenance. Call this once at the start of \
                        a session. With no arguments the project is resolved from the current \
-                       workspace directory (created on first use, git origin recorded)."
+                       workspace directory (created on first use, git origin recorded).",
+        annotations(
+            title = "Load Project Context",
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn bootstrap_project(
         &self,
@@ -441,7 +471,13 @@ impl OwnstateMcp {
         description = "Hybrid search (full-text + semantic) over a project's ACTIVE canonical \
                        knowledge. Returns ranked knowledge with trust levels and evidence ids. \
                        With no project argument the current workspace directory's project is \
-                       searched."
+                       searched.",
+        annotations(
+            title = "Search Project Knowledge",
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn search_knowledge(
         &self,
@@ -495,7 +531,13 @@ impl OwnstateMcp {
 
     #[tool(
         description = "Fetch one knowledge item with its full version history and provenance \
-                       (which interaction events each version derives from)."
+                       (which interaction events each version derives from).",
+        annotations(
+            title = "Get Knowledge History",
+            read_only_hint = true,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn get_knowledge(
         &self,
@@ -515,7 +557,13 @@ impl OwnstateMcp {
     #[tool(
         description = "Propose new candidate knowledge for a project. The proposal is recorded \
                        as PENDING and reviewed by Ownstate's deterministic promotion rules; it \
-                       does NOT directly become trusted project knowledge."
+                       does NOT directly become trusted project knowledge.",
+        annotations(
+            title = "Propose Project Knowledge",
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn propose_knowledge(
         &self,
@@ -572,7 +620,13 @@ impl OwnstateMcp {
         description = "Record an observable event as append-only evidence. This is the \
                        non-negotiable write path for capture. It does NOT update canonical \
                        truth, promote knowledge, or delete/rewrite existing data. The model \
-                       provides observable facts; Ownstate determines derived state."
+                       provides observable facts; Ownstate determines derived state.",
+        annotations(
+            title = "Record Project Event",
+            read_only_hint = false,
+            destructive_hint = false,
+            open_world_hint = false
+        )
     )]
     pub async fn record(
         &self,

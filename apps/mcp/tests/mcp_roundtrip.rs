@@ -134,6 +134,18 @@ async fn mcp_client_retrieves_the_same_knowledge_as_http_services() {
     // Tools are advertised.
     let tools = client.list_tools(Default::default()).await.unwrap();
     let names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
+    for tool in &tools.tools {
+        let annotations = serde_json::to_value(&tool.annotations).unwrap();
+        assert!(
+            annotations["title"]
+                .as_str()
+                .is_some_and(|title| !title.is_empty()),
+            "missing title for {}",
+            tool.name
+        );
+        assert_eq!(annotations["destructiveHint"], false, "{}", tool.name);
+        assert_eq!(annotations["openWorldHint"], false, "{}", tool.name);
+    }
     let profile_tool = tools
         .tools
         .iter()
