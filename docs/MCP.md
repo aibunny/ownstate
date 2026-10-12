@@ -56,6 +56,16 @@ claude mcp add ownstate -- path/to/ownstate-mcp
 
 ## Tools
 
+### get_profile
+
+Return the identity of the authenticated connection. The `id` is an opaque,
+stable principal identifier for one account in one Ownstate space; `email` and
+`nickname` are display details. OpenAI discovers this read-only tool through
+`_meta["openai/profile"]` and receives the profile in `structuredContent`.
+Refreshing or reconnecting with the same account and space preserves the ID.
+
+---
+
 ### bootstrap_project
 
 Load a project's current knowledge state at session start.

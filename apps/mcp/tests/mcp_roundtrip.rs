@@ -134,6 +134,28 @@ async fn mcp_client_retrieves_the_same_knowledge_as_http_services() {
     // Tools are advertised.
     let tools = client.list_tools(Default::default()).await.unwrap();
     let names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
+    let profile_tool = tools
+        .tools
+        .iter()
+        .find(|tool| tool.name == "get_profile")
+        .unwrap();
+    assert_eq!(
+        profile_tool
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.0.get("openai/profile")),
+        Some(&serde_json::json!(true))
+    );
+    assert!(profile_tool.output_schema.is_some());
+    let profile = client
+        .call_tool(CallToolRequestParams::new("get_profile"))
+        .await
+        .unwrap();
+    assert_eq!(
+        profile.structured_content.as_ref().unwrap()["nickname"],
+        "Legacy connection"
+    );
+    assert!(profile.structured_content.as_ref().unwrap()["id"].is_string());
     for expected in [
         "bootstrap_project",
         "search_knowledge",

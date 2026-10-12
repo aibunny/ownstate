@@ -7,6 +7,7 @@ use ownstate_services::projects::EnsureProject;
 use ownstate_services::search::SearchParams;
 use ownstate_services::{AppServices, ServiceError};
 use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::CallToolResult;
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
@@ -207,6 +208,35 @@ pub struct RecordConversationParams {
 
 #[tool_router]
 impl OwnstateMcp {
+    #[tool(
+        description = "Identify the account and space represented by this authenticated Ownstate connection. The opaque id stays the same across token refresh and reconnection.",
+        input_schema = std::sync::Arc::new(serde_json::Map::from_iter([
+            ("type".to_string(), serde_json::json!("object")),
+            ("properties".to_string(), serde_json::json!({})),
+            ("additionalProperties".to_string(), serde_json::json!(false)),
+        ])),
+        output_schema = std::sync::Arc::new(serde_json::Map::from_iter([
+            ("$schema".to_string(), serde_json::json!("https://json-schema.org/draft/2020-12/schema")),
+            ("type".to_string(), serde_json::json!("object")),
+            ("properties".to_string(), serde_json::json!({"id":{"type":"string","minLength":1,"pattern":r"\S"},"email":{"type":"string"},"nickname":{"type":"string"}})),
+            ("required".to_string(), serde_json::json!(["id"])),
+            ("additionalProperties".to_string(), serde_json::json!(false)),
+        ])),
+        annotations(read_only_hint = true, destructive_hint = false, open_world_hint = false),
+        meta = rmcp::model::MetaObject(serde_json::Map::from_iter([("openai/profile".to_string(), serde_json::Value::Bool(true))]))
+    )]
+    pub async fn get_profile(
+        &self,
+        ctx: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let services = self.request_services(&ctx)?;
+        let profile = services.connection_profile().await.map_err(to_mcp_error)?;
+        let value = serde_json::to_value(profile).map_err(|e| {
+            ErrorData::internal_error(format!("profile serialization failed: {e}"), None)
+        })?;
+        Ok(CallToolResult::structured(value))
+    }
+
     #[tool(
         description = "Append one observable event to a non-project chat. Reuse a stable conversation ID and event ID. MCP calls only capture what the client elects to send; they do not expose an entire chat transcript automatically."
     )]

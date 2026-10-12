@@ -69,6 +69,21 @@ async fn account_connections_are_isolated_and_revocable() {
     let first_principal = app.authenticate_digest(&first_digest).await.unwrap();
     let second_principal = app.authenticate_digest(&second_digest).await.unwrap();
     assert_ne!(first_principal.tenant_id(), second_principal.tenant_id());
+    let first_profile = app
+        .for_verified_principal(first_principal.clone())
+        .unwrap()
+        .connection_profile()
+        .await
+        .unwrap();
+    let second_profile = app
+        .for_verified_principal(second_principal.clone())
+        .unwrap()
+        .connection_profile()
+        .await
+        .unwrap();
+    assert_ne!(first_profile.id, second_profile.id);
+    assert_eq!(first_profile.email.as_deref(), Some("first@example.com"));
+    assert_eq!(second_profile.email.as_deref(), Some("second@example.com"));
     let mut threads = Vec::new();
     for principal in [first_principal.clone(), second_principal.clone()] {
         let scoped = app.for_verified_principal(principal).unwrap();
@@ -225,6 +240,22 @@ async fn oauth_code_refresh_and_revoke_keep_one_account_owner() {
         app.is_active_mcp_connection(&refreshed_digest)
             .await
             .unwrap()
+    );
+    let first_principal = app.authenticate_digest(&digest).await.unwrap();
+    let refreshed_principal = app.authenticate_digest(&refreshed_digest).await.unwrap();
+    assert_eq!(
+        app.for_verified_principal(first_principal)
+            .unwrap()
+            .connection_profile()
+            .await
+            .unwrap()
+            .id,
+        app.for_verified_principal(refreshed_principal)
+            .unwrap()
+            .connection_profile()
+            .await
+            .unwrap()
+            .id
     );
     let connection = app.account_connections(account).await.unwrap().remove(0);
     assert!(connection.oauth_grant_id.is_some());

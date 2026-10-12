@@ -63,6 +63,17 @@ pub struct PersonalPolicyActors {
     pub worker: AuthenticatedPrincipal,
 }
 
+/// Stable, credential-scoped identity for clients that display multiple
+/// Ownstate connections. The principal ID is assigned once per account and
+/// tenant; it is never derived from an editable email or workspace label.
+#[derive(serde::Serialize)]
+pub struct ConnectionProfile {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    pub nickname: String,
+}
+
 impl AppServices {
     /// Bind work to the tenant embedded in a storage-verified principal.
     /// HTTP callers must use this instead of the deployment's default tenant.
@@ -309,6 +320,33 @@ impl AppServices {
 impl PrincipalServices {
     pub fn principal(&self) -> &AuthenticatedPrincipal {
         &self.principal
+    }
+
+    pub async fn connection_profile(&self) -> ServiceResult<ConnectionProfile> {
+        let member: Option<(String, String)> = sqlx::query_as(
+            "SELECT a.email,w.name FROM account_tenant_memberships m \
+             JOIN signup_accounts a ON a.id=m.account_id \
+             JOIN workspaces w ON w.tenant_id=m.tenant_id AND w.id=m.workspace_id \
+             WHERE m.tenant_id=$1 AND m.principal_id=$2 \
+             AND a.email_verified_at IS NOT NULL \
+             AND (w.personal_user_id=m.user_id OR EXISTS ( \
+                 SELECT 1 FROM organization_memberships om \
+                 WHERE om.tenant_id=m.tenant_id AND om.organization_id=w.organization_id \
+                 AND om.user_id=m.user_id)) LIMIT 1",
+        )
+        .bind(self.principal.tenant_id().as_uuid())
+        .bind(self.principal.id().as_uuid())
+        .fetch_optional(self.app.pool())
+        .await?;
+        let (email, nickname) = match member {
+            Some((email, workspace)) => (Some(email), workspace),
+            None => (None, "Legacy connection".to_string()),
+        };
+        Ok(ConnectionProfile {
+            id: self.principal.id().to_string(),
+            email,
+            nickname,
+        })
     }
 
     pub(crate) fn app(&self) -> &Arc<AppServices> {
