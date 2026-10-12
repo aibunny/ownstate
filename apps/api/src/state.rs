@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::site::SignupConfig;
 use ownstate_services::AppServices;
 use ownstate_services::ServiceResult;
 use ownstate_services::policy::AuthenticatedPrincipal;
@@ -13,6 +14,10 @@ pub struct AppState {
     /// Dedicated, least-privilege principal used only by the authenticated
     /// Streamable HTTP MCP endpoint. `None` keeps `/mcp` disabled.
     pub mcp_principal: Option<AuthenticatedPrincipal>,
+    /// Business deployments accept account-owned MCP connections in addition
+    /// to an optional legacy configured MCP principal.
+    pub account_mcp_enabled: bool,
+    pub signup_config: Option<Arc<SignupConfig>>,
     /// Exact public authorities accepted by the MCP transport's DNS-rebinding
     /// protection. Loopback authorities are always included for local tests.
     pub mcp_allowed_hosts: Vec<String>,
@@ -42,6 +47,8 @@ impl AppState {
             personal_fallback: (api_token.is_none() && admin_token.is_none())
                 .then_some(actors.owner),
             mcp_principal: mcp_token.is_some().then_some(actors.mcp),
+            account_mcp_enabled: false,
+            signup_config: None,
             mcp_allowed_hosts,
         })
     }
@@ -55,7 +62,19 @@ impl AppState {
             services,
             personal_fallback: None,
             mcp_principal,
+            account_mcp_enabled: true,
+            signup_config: None,
             mcp_allowed_hosts,
         }
+    }
+
+    pub fn with_signup_config(mut self, signup_config: Option<SignupConfig>) -> Self {
+        self.signup_config = signup_config.map(Arc::new);
+        self
+    }
+
+    pub fn enable_account_connections(mut self) -> Self {
+        self.account_mcp_enabled = true;
+        self
     }
 }

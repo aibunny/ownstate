@@ -50,8 +50,56 @@ After deployment:
    ```
 
 The API service exposes authenticated Streamable HTTP MCP at
-`https://YOUR-DOMAIN/mcp`. It accepts only `OWNSTATE_MCP_TOKEN`; API and admin
-tokens are rejected. PostgreSQL remains private.
+`https://YOUR-DOMAIN/mcp`. In the base template it accepts the configured
+`OWNSTATE_MCP_TOKEN`. With account signup enabled it also accepts active
+user-owned connections; API and admin tokens are rejected. PostgreSQL remains private.
+
+### Account signup and user-owned connections
+
+The template above remains a single-user starting point. The API can also host
+the multi-user account site and OAuth MCP connections without changing the
+existing Personal worker or its credentials. After backing up the database and
+deploying the code with migrations 0013–0018, set these **API service**
+variables. Railway Hobby blocks outbound SMTP, so use a verified Resend domain
+and its HTTPS API on that plan:
+
+```text
+OWNSTATE_PUBLIC_URL=https://YOUR-DOMAIN
+OWNSTATE_SMTP_FROM=ownstate@theaibunny.com
+OWNSTATE_RESEND_API_KEY=<set privately as a Railway secret>
+```
+
+If the Railway workspace is upgraded to Pro, Lark SMTP can be used instead:
+
+```text
+OWNSTATE_PUBLIC_URL=https://YOUR-DOMAIN
+OWNSTATE_SMTP_HOST=smtp.larksuite.com
+OWNSTATE_SMTP_PORT=587
+OWNSTATE_SMTP_FROM=ownstate@theaibunny.com
+OWNSTATE_SMTP_USERNAME=ownstate@theaibunny.com
+OWNSTATE_SMTP_PASSWORD=<set privately as a Railway secret>
+```
+
+The API prefers Resend when `OWNSTATE_RESEND_API_KEY` is set. Otherwise it uses
+Lark STARTTLS on port 587. The account site remains disabled until the public
+URL and a supported email credential are configured. Railway Pro requires a
+redeploy after upgrade to allow SMTP. A new signup receives a new
+personal tenant; it does not take ownership of the original Personal mode
+tenant or its historical data. Keep the original deployment credentials until
+that ownership migration is planned and verified separately.
+
+Users sign up at `/signup`, verify their email, and can create organizations and
+invite members from `/account`. The account page issues per-user manual MCP
+tokens and allows revocation. OAuth clients discover the authorization server
+through `/.well-known/oauth-protected-resource/mcp`. The authenticated
+`/capture/conversations` endpoint accepts events from local host adapters.
+See [the capture strategy](CHAT_CAPTURE_AND_MULTI_TENANT_STRATEGY.md) and
+[adapter setup](../integrations/README.md) for coverage and limitations.
+
+Do not advertise the site or submit connector listings until email delivery,
+OAuth interoperability with each target client, broader traffic controls, backup/restore,
+and the privacy and retention policy have been verified in the deployed
+environment. MCP access does not provide a passive full chat transcript.
 
 ## Template service contract
 

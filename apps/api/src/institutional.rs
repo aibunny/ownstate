@@ -23,7 +23,7 @@ pub async fn propose(
         Json(
             state
                 .services
-                .for_principal(principal)?
+                .for_verified_principal(principal)?
                 .propose_institutional(req)
                 .await?,
         ),
@@ -38,7 +38,7 @@ pub async fn promote(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .promote_institutional(id)
             .await?,
     ))
@@ -52,7 +52,7 @@ pub async fn entities(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .institutional_snapshot(q, None, Some("ENTITY"))
             .await?,
     ))
@@ -65,7 +65,7 @@ pub async fn relationships(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .institutional_snapshot(q, None, Some("RELATIONSHIP"))
             .await?,
     ))
@@ -80,7 +80,7 @@ pub async fn entity_relationships(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .entity_relationships(q.project_id, id, q.limit.unwrap_or(100), q.as_of)
             .await?,
     ))
@@ -93,7 +93,7 @@ pub async fn claims(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .institutional_snapshot(q, None, Some("CLAIM"))
             .await?,
     ))
@@ -106,7 +106,7 @@ pub async fn get_entity(
 ) -> Result<Json<InstitutionalSnapshot>, ApiError> {
     let snapshot = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .institutional_snapshot(q, Some(id.as_uuid()), Some("ENTITY"))
         .await?;
     if snapshot.versions.is_empty() {
@@ -130,7 +130,7 @@ pub async fn resolve(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .resolve_entity(q.project_id, &q.value, q.namespace.as_deref(), None)
             .await?,
     ))
@@ -145,7 +145,7 @@ pub async fn history(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .institutional_history(q.project_id, id.as_uuid())
             .await?,
     ))

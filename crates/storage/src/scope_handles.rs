@@ -14,6 +14,7 @@ use crate::error::StorageError;
 pub async fn insert_handle(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: TenantId,
+    principal_id: PrincipalId,
     ownership_domain: OwnershipDomain,
     project_id: Option<ProjectId>,
     repository_id: Option<RepositoryId>,
@@ -23,15 +24,16 @@ pub async fn insert_handle(
     label: Option<&str>,
     expires_at: Option<DateTime<Utc>>,
 ) -> Result<ScopeHandle, StorageError> {
-    let id = ScopeHandleId::generate();
+    let id = ScopeHandleId::generate_opaque();
     let now = Utc::now();
 
     sqlx::query(
-        "INSERT INTO scope_handles (id, tenant_id, ownership_domain, project_id, repository_id, workspace_id, scope_kind, resolution_state, label, created_at, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"
+        "INSERT INTO scope_handles (id, tenant_id, principal_id, ownership_domain, project_id, repository_id, workspace_id, scope_kind, resolution_state, label, created_at, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)"
     )
     .bind(id.as_uuid())
     .bind(tenant_id.as_uuid())
+    .bind(principal_id.as_uuid())
     .bind(ownership_domain.as_str())
     .bind(project_id.map(|p| p.as_uuid()))
     .bind(repository_id.map(|r| r.as_uuid()))
@@ -64,16 +66,18 @@ pub async fn insert_handle(
 pub async fn find_handle(
     pool: &PgPool,
     tenant_id: TenantId,
+    principal_id: PrincipalId,
     handle_id: ScopeHandleId,
     now: DateTime<Utc>,
 ) -> Result<Option<ScopeHandle>, StorageError> {
     let handle = sqlx::query_as::<_, ScopeHandleRow>(
         "SELECT id, tenant_id, ownership_domain, project_id, repository_id, workspace_id, scope_kind, resolution_state, label, created_at, expires_at, revoked_at
          FROM scope_handles
-         WHERE id = $1 AND tenant_id = $2"
+         WHERE id = $1 AND tenant_id = $2 AND principal_id = $3"
     )
     .bind(handle_id.as_uuid())
     .bind(tenant_id.as_uuid())
+    .bind(principal_id.as_uuid())
     .fetch_optional(pool)
     .await?;
 
@@ -100,6 +104,7 @@ pub async fn revoke_handle(
 pub async fn find_handle_for_scope(
     pool: &PgPool,
     tenant_id: TenantId,
+    principal_id: PrincipalId,
     project_id: Option<ProjectId>,
     repository_id: Option<RepositoryId>,
     now: DateTime<Utc>,
@@ -108,14 +113,16 @@ pub async fn find_handle_for_scope(
         "SELECT id, tenant_id, ownership_domain, project_id, repository_id, workspace_id, scope_kind, resolution_state, label, created_at, expires_at, revoked_at
          FROM scope_handles
          WHERE tenant_id = $1
+           AND principal_id = $2
            AND revoked_at IS NULL
-           AND (expires_at IS NULL OR expires_at > $2)
-           AND project_id IS NOT DISTINCT FROM $3
-           AND repository_id IS NOT DISTINCT FROM $4
+           AND (expires_at IS NULL OR expires_at > $3)
+           AND project_id IS NOT DISTINCT FROM $4
+           AND repository_id IS NOT DISTINCT FROM $5
          ORDER BY created_at DESC
          LIMIT 1"
     )
     .bind(tenant_id.as_uuid())
+    .bind(principal_id.as_uuid())
     .bind(now)
     .bind(project_id.map(|p| p.as_uuid()))
     .bind(repository_id.map(|r| r.as_uuid()))

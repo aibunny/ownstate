@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "python3 /ABSOLUTE/PATH/TO/ownstate_capture.py claude-code", "timeout": 5}]}],
+    "Stop": [{"hooks": [{"type": "command", "command": "python3 /ABSOLUTE/PATH/TO/ownstate_capture.py claude-code", "timeout": 5}]}],
+    "PostToolUse": [{"hooks": [{"type": "command", "command": "python3 /ABSOLUTE/PATH/TO/ownstate_capture.py claude-code", "timeout": 5}]}]
+  }
+}

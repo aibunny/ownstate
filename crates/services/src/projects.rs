@@ -1,5 +1,5 @@
 use chrono::Utc;
-use ownstate_domain::{OwnershipDomain, Project, ProjectId, limits};
+use ownstate_domain::{OwnershipDomain, Project, ProjectId, WorkspaceId, limits};
 use ownstate_storage::{policy, projects};
 use serde_json::Value as Json;
 
@@ -93,7 +93,12 @@ impl AppServices {
     ///
     /// Race-safe: a concurrent creator's insert wins via the unique
     /// (tenant, lower(name)) index and we fall back to reading their row.
-    pub(crate) async fn ensure_project(&self, req: EnsureProject) -> ServiceResult<Project> {
+    pub(crate) async fn ensure_project(
+        &self,
+        req: EnsureProject,
+        workspace_id: WorkspaceId,
+        ownership_domain: OwnershipDomain,
+    ) -> ServiceResult<Project> {
         let name = req.name.trim().to_string();
         if name.is_empty() || name.len() > limits::MAX_NAME_LEN {
             return Err(ServiceError::validation(format!(
@@ -160,13 +165,12 @@ impl AppServices {
         let project = Project {
             id: ProjectId::generate(),
             tenant_id: self.tenant_id(),
-            ownership_domain: OwnershipDomain::Personal,
+            ownership_domain,
             name: create_name.clone(),
             description: None,
             metadata: Json::Object(metadata),
             created_at: Utc::now(),
         };
-        let bootstrap = policy::bootstrap_personal_policy(self.pool(), self.tenant_id()).await?;
         let mut tx = self.pool().begin().await?;
         match projects::insert(&mut *tx, &project).await {
             Ok(()) => {
@@ -174,9 +178,9 @@ impl AppServices {
                     &mut *tx,
                     project.tenant_id,
                     project.id,
-                    bootstrap.workspace_id,
+                    workspace_id,
                     None,
-                    OwnershipDomain::Personal,
+                    ownership_domain,
                 )
                 .await?;
                 tx.commit().await?;

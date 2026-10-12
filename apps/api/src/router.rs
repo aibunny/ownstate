@@ -6,8 +6,10 @@ use rmcp::transport::streamable_http_server::session::local::LocalSessionManager
 use rmcp::transport::{StreamableHttpServerConfig, StreamableHttpService};
 use tower_http::trace::TraceLayer;
 
-use crate::auth::{require_bearer, require_mcp_bearer};
+use crate::auth::{require_bearer, require_capture_bearer, require_mcp_bearer};
 use crate::handlers;
+use crate::oauth;
+use crate::site;
 use crate::state::AppState;
 
 /// 4 MiB request cap: event batches are bounded server-side anyway, and large
@@ -68,14 +70,74 @@ pub fn build(state: AppState) -> Router {
         .route("/ready", get(handlers::ready))
         .merge(protected);
 
-    if let Some(principal) = state.mcp_principal.clone() {
-        let scoped = state
-            .services
-            .for_principal(principal)
-            .expect("validated MCP principal must belong to the API tenant");
+    if state.account_mcp_enabled {
+        app = app.merge(
+            Router::new()
+                .route(
+                    "/capture/conversations",
+                    post(crate::conversations::capture).get(crate::conversations::list),
+                )
+                .route(
+                    "/capture/conversations/{id}/events",
+                    get(crate::conversations::events),
+                )
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    require_capture_bearer,
+                )),
+        );
+        app = app.merge(
+            Router::new()
+                .route("/", get(site::home))
+                .route("/signup", get(site::signup_page).post(site::signup_submit))
+                .route("/verify", get(site::verify))
+                .route("/verify/resend", post(site::resend_verification))
+                .route("/login", get(site::login_page).post(site::login_submit))
+                .route("/account", get(site::account_page))
+                .route("/account/conversations", get(site::conversations_page))
+                .route("/account/conversations/{id}", get(site::conversation_page))
+                .route("/connections", post(site::create_connection))
+                .route("/connections/revoke", post(site::revoke_connection))
+                .route("/organizations", post(site::create_organization))
+                .route("/invitations", post(site::send_invitation))
+                .route(
+                    "/invitations/accept",
+                    get(site::invitation_page).post(site::accept_invitation),
+                )
+                .route("/logout", post(site::logout)),
+        );
+        app = app.merge(
+            Router::new()
+                .route(
+                    "/.well-known/oauth-protected-resource",
+                    get(oauth::resource_metadata),
+                )
+                .route(
+                    "/.well-known/oauth-protected-resource/mcp",
+                    get(oauth::resource_metadata),
+                )
+                .route(
+                    "/.well-known/oauth-authorization-server",
+                    get(oauth::authorization_metadata),
+                )
+                .route("/oauth/register", post(oauth::register_client))
+                .route(
+                    "/oauth/authorize",
+                    get(oauth::authorize_page).post(oauth::authorize_submit),
+                )
+                .route("/oauth/token", post(oauth::token)),
+        );
+    }
+
+    if state.mcp_principal.is_some() || state.account_mcp_enabled {
+        let services = state.services.clone();
         let service: StreamableHttpService<ownstate_mcp::OwnstateMcp, LocalSessionManager> =
             StreamableHttpService::new(
-                move || Ok(ownstate_mcp::OwnstateMcp::new(scoped.clone(), None)),
+                move || {
+                    Ok(ownstate_mcp::OwnstateMcp::authenticated_http(
+                        services.clone(),
+                    ))
+                },
                 Default::default(),
                 StreamableHttpServerConfig::default()
                     .with_allowed_hosts(state.mcp_allowed_hosts.clone())

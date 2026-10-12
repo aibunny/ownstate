@@ -2,12 +2,13 @@ use ownstate_domain::{
     ActorType, CandidateId, EventId, InteractionEventType, KnowledgeItemId, KnowledgeKind,
     ProjectId, ProposerKind, SecurityClassification, SessionId,
 };
-use ownstate_services::ServiceError;
-use ownstate_services::policy::PrincipalServices;
+use ownstate_services::policy::{AuthenticatedPrincipal, PrincipalServices};
 use ownstate_services::projects::EnsureProject;
 use ownstate_services::search::SearchParams;
+use ownstate_services::{AppServices, ServiceError};
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::{ErrorData, ServerHandler, tool, tool_handler, tool_router};
+use rmcp::service::RequestContext;
+use rmcp::{ErrorData, RoleServer, ServerHandler, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -15,9 +16,15 @@ use crate::workspace::Workspace;
 
 #[derive(Clone)]
 pub struct OwnstateMcp {
-    services: PrincipalServices,
+    services: McpServices,
     /// Detected at startup from the directory the MCP client launched us in.
     workspace: Option<Workspace>,
+}
+
+#[derive(Clone)]
+enum McpServices {
+    Fixed(PrincipalServices),
+    AuthenticatedHttp(std::sync::Arc<AppServices>),
 }
 
 fn to_mcp_error(err: ServiceError) -> ErrorData {
@@ -179,12 +186,92 @@ pub struct RecordParams {
     pub metadata: Option<serde_json::Value>,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RecordConversationParams {
+    /// Client name, for example codex, claude, or opencode.
+    pub source: String,
+    /// Stable host conversation identifier. Reuse this for each message in the chat.
+    pub source_conversation_id: String,
+    pub title: Option<String>,
+    /// Stable host event identifier, if available, for safe retries.
+    pub source_event_id: Option<String>,
+    /// USER_MESSAGE, ASSISTANT_MESSAGE, TOOL_CALL, TOOL_RESULT, SYSTEM_EVENT, or ARTIFACT_CREATED.
+    pub event_type: String,
+    /// USER, ASSISTANT, TOOL, or SYSTEM.
+    pub actor_type: String,
+    pub content: Option<String>,
+    pub occurred_at: Option<String>,
+    pub security_classification: Option<String>,
+}
+
 #[tool_router]
 impl OwnstateMcp {
+    #[tool(
+        description = "Append one observable event to a non-project chat. Reuse a stable conversation ID and event ID. MCP calls only capture what the client elects to send; they do not expose an entire chat transcript automatically."
+    )]
+    pub async fn record_conversation(
+        &self,
+        ctx: RequestContext<RoleServer>,
+        Parameters(p): Parameters<RecordConversationParams>,
+    ) -> Result<String, ErrorData> {
+        let services = self.request_services(&ctx)?;
+        let occurred_at = p
+            .occurred_at
+            .as_deref()
+            .map(str::parse)
+            .transpose()
+            .map_err(|_| ErrorData::invalid_params("invalid occurred_at", None))?;
+        let result = services
+            .capture_conversation(ownstate_services::conversations::CaptureConversation {
+                source: p.source,
+                source_conversation_id: p.source_conversation_id,
+                title: p.title,
+                capture_mode: "MCP_ONLY".into(),
+                source_event_id: p.source_event_id,
+                event_type: p.event_type,
+                actor_type: p.actor_type,
+                content: p.content,
+                occurred_at,
+                security_classification: p.security_classification,
+            })
+            .await
+            .map_err(to_mcp_error)?;
+        to_json_text(&result)
+    }
+
     pub fn new(services: PrincipalServices, workspace: Option<Workspace>) -> Self {
         Self {
-            services,
+            services: McpServices::Fixed(services),
             workspace,
+        }
+    }
+
+    pub fn authenticated_http(services: std::sync::Arc<AppServices>) -> Self {
+        Self {
+            services: McpServices::AuthenticatedHttp(services),
+            workspace: None,
+        }
+    }
+
+    fn request_services(
+        &self,
+        ctx: &RequestContext<RoleServer>,
+    ) -> Result<PrincipalServices, ErrorData> {
+        match &self.services {
+            McpServices::Fixed(scoped) => Ok(scoped.clone()),
+            McpServices::AuthenticatedHttp(base) => {
+                let principal = ctx
+                    .extensions
+                    .get::<http::request::Parts>()
+                    .and_then(|parts| parts.extensions.get::<AuthenticatedPrincipal>())
+                    .ok_or_else(|| {
+                        ErrorData::internal_error("authenticated principal missing", None)
+                    })?;
+                std::sync::Arc::new(base.for_tenant(principal.tenant_id()))
+                    .for_principal(principal.clone())
+                    .map_err(to_mcp_error)
+            }
         }
     }
 
@@ -193,12 +280,13 @@ impl OwnstateMcp {
     )]
     pub async fn get_entity(
         &self,
+        ctx: RequestContext<RoleServer>,
         Parameters(p): Parameters<GetEntityParams>,
     ) -> Result<String, ErrorData> {
+        let services = self.request_services(&ctx)?;
         let project_id = parse_id(&p.project_id, "project_id")?;
         let id: ownstate_domain::EntityId = parse_id(&p.entity_id, "entity_id")?;
-        let snapshot = self
-            .services
+        let snapshot = services
             .institutional_snapshot(
                 ownstate_services::institutional::InstitutionalQuery {
                     project_id,
@@ -218,12 +306,13 @@ impl OwnstateMcp {
     )]
     pub async fn get_relationships(
         &self,
+        ctx: RequestContext<RoleServer>,
         Parameters(p): Parameters<GetRelationshipsParams>,
     ) -> Result<String, ErrorData> {
+        let services = self.request_services(&ctx)?;
         let project_id = parse_id(&p.project_id, "project_id")?;
         let id: ownstate_domain::EntityId = parse_id(&p.entity_id, "entity_id")?;
-        let versions = self
-            .services
+        let versions = services
             .entity_relationships(project_id, id, p.limit.unwrap_or(100), None)
             .await
             .map_err(to_mcp_error)?;
@@ -235,10 +324,11 @@ impl OwnstateMcp {
     )]
     pub async fn compile_context(
         &self,
+        ctx: RequestContext<RoleServer>,
         Parameters(p): Parameters<CompileContextParams>,
     ) -> Result<String, ErrorData> {
-        let compiled = self
-            .services
+        let services = self.request_services(&ctx)?;
+        let compiled = services
             .compile_context(ownstate_services::context::CompileRequest {
                 project_id: parse_id(&p.project_id, "project_id")?,
                 task: p.task,
@@ -261,6 +351,7 @@ impl OwnstateMcp {
     /// own, its git origin (if any) is recorded on the project.
     async fn resolve_project(
         &self,
+        services: &PrincipalServices,
         project_id: &Option<String>,
         project: &Option<String>,
     ) -> Result<ProjectId, ErrorData> {
@@ -283,8 +374,7 @@ impl OwnstateMcp {
         let git_origin = this_workspace.and_then(|w| w.git_origin.clone());
         let root_path = this_workspace.map(|w| w.root_path.clone());
 
-        let resolved = self
-            .services
+        let resolved = services
             .ensure_project(EnsureProject {
                 name,
                 git_origin,
@@ -303,11 +393,14 @@ impl OwnstateMcp {
     )]
     pub async fn bootstrap_project(
         &self,
+        ctx: RequestContext<RoleServer>,
         Parameters(p): Parameters<BootstrapProjectParams>,
     ) -> Result<String, ErrorData> {
-        let project_id = self.resolve_project(&p.project_id, &p.project).await?;
-        let bootstrap = self
-            .services
+        let services = self.request_services(&ctx)?;
+        let project_id = self
+            .resolve_project(&services, &p.project_id, &p.project)
+            .await?;
+        let bootstrap = services
             .bootstrap_project(project_id, p.max_items.unwrap_or(20), p.agent)
             .await
             .map_err(to_mcp_error)?;
@@ -322,9 +415,13 @@ impl OwnstateMcp {
     )]
     pub async fn search_knowledge(
         &self,
+        ctx: RequestContext<RoleServer>,
         Parameters(p): Parameters<SearchKnowledgeParams>,
     ) -> Result<String, ErrorData> {
-        let project_id = self.resolve_project(&p.project_id, &p.project).await?;
+        let services = self.request_services(&ctx)?;
+        let project_id = self
+            .resolve_project(&services, &p.project_id, &p.project)
+            .await?;
         let kinds = match p.kinds {
             Some(raw) => {
                 let parsed: Result<Vec<KnowledgeKind>, _> =
@@ -333,8 +430,7 @@ impl OwnstateMcp {
             }
             None => None,
         };
-        let hits = self
-            .services
+        let hits = services
             .search_knowledge(SearchParams {
                 project_id,
                 query: p.query,
@@ -373,14 +469,12 @@ impl OwnstateMcp {
     )]
     pub async fn get_knowledge(
         &self,
+        ctx: RequestContext<RoleServer>,
         Parameters(p): Parameters<GetKnowledgeParams>,
     ) -> Result<String, ErrorData> {
+        let services = self.request_services(&ctx)?;
         let id: KnowledgeItemId = parse_id(&p.knowledge_item_id, "knowledge_item_id")?;
-        let detail = self
-            .services
-            .get_knowledge(id)
-            .await
-            .map_err(to_mcp_error)?;
+        let detail = services.get_knowledge(id).await.map_err(to_mcp_error)?;
         to_json_text(&serde_json::json!({
             "item": detail.item,
             "versions": detail.versions,
@@ -395,9 +489,13 @@ impl OwnstateMcp {
     )]
     pub async fn propose_knowledge(
         &self,
+        ctx: RequestContext<RoleServer>,
         Parameters(p): Parameters<ProposeKnowledgeParams>,
     ) -> Result<String, ErrorData> {
-        let project_id = self.resolve_project(&p.project_id, &p.project).await?;
+        let services = self.request_services(&ctx)?;
+        let project_id = self
+            .resolve_project(&services, &p.project_id, &p.project)
+            .await?;
         let session_id: Option<SessionId> = match &p.session_id {
             Some(raw) => Some(parse_id(raw, "session_id")?),
             None => None,
@@ -413,8 +511,7 @@ impl OwnstateMcp {
             None => Vec::new(),
         };
 
-        let candidate = self
-            .services
+        let candidate = services
             .propose_knowledge(ownstate_services::knowledge::ProposeKnowledge {
                 project_id,
                 session_id,
@@ -449,9 +546,13 @@ impl OwnstateMcp {
     )]
     pub async fn record(
         &self,
+        ctx: RequestContext<RoleServer>,
         Parameters(p): Parameters<RecordParams>,
     ) -> Result<String, ErrorData> {
-        let project_id = self.resolve_project(&p.project_id, &p.project).await?;
+        let services = self.request_services(&ctx)?;
+        let project_id = self
+            .resolve_project(&services, &p.project_id, &p.project)
+            .await?;
 
         let event_type: InteractionEventType =
             p.event_type
@@ -480,8 +581,7 @@ impl OwnstateMcp {
         };
 
         // Determine session: use existing or create a new one for this record
-        let session = self
-            .services
+        let session = services
             .create_session(ownstate_services::sessions::CreateSession {
                 project_id,
                 source: "mcp-record".to_string(),
@@ -516,8 +616,7 @@ impl OwnstateMcp {
             metadata: p.metadata,
         };
 
-        let events = self
-            .services
+        let events = services
             .append_events(session.id, vec![event])
             .await
             .map_err(to_mcp_error)?;

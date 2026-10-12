@@ -10,9 +10,9 @@ use ownstate_domain::{
     AgentExecutionId, AuthorizedScope, CandidateId, CandidateKnowledge, CredentialId, EntityId,
     EntityResolution, ExecutionBudget, GrantSpec, GraphCandidate, GraphCandidateId,
     InstitutionalVersion, InteractionEvent, KnowledgeItem, KnowledgeItemId, KnowledgeVersion,
-    ModelDestination, NewInteractionEvent, OwnershipDomain, PolicyAction, PolicyRequest,
-    PrincipalKind, Project, ProjectId, ProposerKind, QueryPlan, ResourceScope,
-    SecurityClassification, Session, SessionId, limits,
+    ModelDestination, NewInteractionEvent, PolicyAction, PolicyRequest, PrincipalKind, Project,
+    ProjectId, ProposerKind, QueryPlan, ResourceScope, SecurityClassification, Session, SessionId,
+    limits,
 };
 use ownstate_storage::{policy, projects};
 use sqlx::{Postgres, Transaction};
@@ -64,6 +64,15 @@ pub struct PersonalPolicyActors {
 }
 
 impl AppServices {
+    /// Bind work to the tenant embedded in a storage-verified principal.
+    /// HTTP callers must use this instead of the deployment's default tenant.
+    pub fn for_verified_principal(
+        self: &Arc<Self>,
+        principal: AuthenticatedPrincipal,
+    ) -> ServiceResult<PrincipalServices> {
+        Arc::new(self.for_tenant(principal.tenant_id())).for_principal(principal)
+    }
+
     pub fn for_principal(
         self: &Arc<Self>,
         principal: AuthenticatedPrincipal,
@@ -110,6 +119,44 @@ impl AppServices {
         policy::resolve_credential(self.pool(), credential_digest, Utc::now())
             .await?
             .ok_or_else(|| ServiceError::forbidden("credential is invalid, expired, or revoked"))
+    }
+
+    /// The credential must have been explicitly issued for an MCP connection,
+    /// and its account must still be verified. The principal itself is still
+    /// authenticated separately on every request.
+    pub async fn is_active_mcp_connection(&self, digest: &str) -> ServiceResult<bool> {
+        let active: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM mcp_connections c \
+             JOIN signup_accounts a ON a.id = c.account_id \
+             JOIN account_tenant_memberships m ON m.account_id=c.account_id \
+                  AND m.tenant_id=c.tenant_id AND m.principal_id=c.principal_id \
+             JOIN workspaces w ON w.tenant_id=m.tenant_id AND w.id=m.workspace_id \
+             JOIN principals p ON p.tenant_id=c.tenant_id AND p.id=c.principal_id \
+             JOIN principal_credentials pc ON pc.credential_digest = c.credential_digest \
+             AND pc.tenant_id = c.tenant_id AND pc.principal_id = c.principal_id \
+             WHERE c.credential_digest = $1 AND c.revoked_at IS NULL \
+             AND (c.oauth_grant_id IS NULL OR EXISTS(SELECT 1 FROM oauth_grants g \
+                  WHERE g.id=c.oauth_grant_id AND g.revoked_at IS NULL)) \
+             AND a.email_verified_at IS NOT NULL AND p.enabled \
+             AND (w.personal_user_id=m.user_id OR EXISTS (SELECT 1 FROM organization_memberships om \
+                 WHERE om.tenant_id=m.tenant_id AND om.organization_id=w.organization_id AND om.user_id=m.user_id)) \
+             AND pc.revoked_at IS NULL \
+             AND (pc.valid_until IS NULL OR pc.valid_until > clock_timestamp()))",
+        )
+        .bind(digest)
+        .fetch_one(self.pool())
+        .await?;
+        Ok(active)
+    }
+
+    pub async fn is_mcp_credential(&self, digest: &str) -> ServiceResult<bool> {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM mcp_connections WHERE credential_digest = $1)",
+        )
+        .bind(digest)
+        .fetch_one(self.pool())
+        .await?;
+        Ok(exists)
     }
 
     pub async fn bootstrap_personal_policy_actors(
@@ -444,11 +491,16 @@ impl PrincipalServices {
     }
 
     pub async fn create_project(&self, req: CreateProject) -> ServiceResult<Project> {
-        let bootstrap =
-            policy::bootstrap_personal_policy(self.app.pool(), self.app.tenant_id()).await?;
-        if req.ownership_domain == Some(OwnershipDomain::Organization) {
+        let (workspace_id, ownership_domain) =
+            policy::project_workspace_for_principal(self.app.pool(), &self.principal)
+                .await?
+                .ok_or_else(|| ServiceError::forbidden("workspace is not authorized"))?;
+        if req
+            .ownership_domain
+            .is_some_and(|requested| requested != ownership_domain)
+        {
             return Err(ServiceError::forbidden(
-                "organization projects require an explicitly authorized organization workspace",
+                "project ownership does not match workspace",
             ));
         }
         let name = req.name.trim().to_string();
@@ -462,7 +514,7 @@ impl PrincipalServices {
             action: PolicyAction::CreateProject,
             resource: ResourceScope {
                 tenant_id: self.app.tenant_id(),
-                workspace_id: bootstrap.workspace_id,
+                workspace_id,
                 project_id: None,
             },
             classification: SecurityClassification::Internal,
@@ -474,7 +526,7 @@ impl PrincipalServices {
         let project = Project {
             id: ProjectId::generate(),
             tenant_id: self.app.tenant_id(),
-            ownership_domain: OwnershipDomain::Personal,
+            ownership_domain,
             name,
             description: req.description,
             metadata: req
@@ -505,9 +557,9 @@ impl PrincipalServices {
             &mut *tx,
             project.tenant_id,
             project.id,
-            bootstrap.workspace_id,
+            workspace_id,
             None,
-            OwnershipDomain::Personal,
+            ownership_domain,
         )
         .await?;
         tx.commit().await?;
@@ -515,8 +567,10 @@ impl PrincipalServices {
     }
 
     pub async fn ensure_project(&self, req: EnsureProject) -> ServiceResult<Project> {
-        let bootstrap =
-            policy::bootstrap_personal_policy(self.app.pool(), self.app.tenant_id()).await?;
+        let (workspace_id, ownership_domain) =
+            policy::project_workspace_for_principal(self.app.pool(), &self.principal)
+                .await?
+                .ok_or_else(|| ServiceError::forbidden("workspace is not authorized"))?;
         let mut existing = None;
         if let Some(origin) = &req.git_origin {
             existing =
@@ -550,7 +604,7 @@ impl PrincipalServices {
                 PolicyAction::CreateProject,
                 ResourceScope {
                     tenant_id: self.app.tenant_id(),
-                    workspace_id: bootstrap.workspace_id,
+                    workspace_id,
                     project_id: None,
                 },
                 SecurityClassification::Internal,
@@ -559,7 +613,10 @@ impl PrincipalServices {
             )
             .await?
         };
-        let result = self.app.ensure_project(req).await;
+        let result = self
+            .app
+            .ensure_project(req, workspace_id, ownership_domain)
+            .await;
         lease.finish().await?;
         result
     }
