@@ -491,7 +491,7 @@ pub async fn account_page(State(state): State<AppState>, headers: HeaderMap) -> 
         .as_ref()
         .map(|config| format!("{}/mcp", config.public_url))
         .unwrap_or_default();
-    page("Account", &format!("<h1>Your Ownstate account</h1><p><a href=/account/conversations>View saved chats</a></p><h2>Connect an AI app</h2><p>Add this remote MCP address in a supported client: <code>{}</code>. Sign in with Ownstate and choose your personal or organization space. Your OAuth connection is saved across sessions and can be revoked here. Connect separately for each space you want available.</p><p class=muted>The remote connector receives only the Ownstate tools you use. To save supported local chat events automatically, install a local capture adapter.</p><h2>Manual connection for local adapters</h2><p>Create a scoped token for a local capture adapter or a client that cannot sign in with OAuth. Keep the token private.</p><form method=post action=/connections><label>Client name</label><input name=client_name placeholder='Codex, Claude, or OpenCode' maxlength=100 required><label>Ownstate space</label><select name=workspace_id required>{options}</select><button>Create connection</button></form><h2>Active connections</h2><ul>{connection_rows}</ul><h2>Organizations</h2><ul>{organizations}</ul><form method=post action=/organizations><label>New organization name</label><input name=name maxlength=200 required><button>Create organization</button></form><form method=post action=/logout><button>Sign out</button></form>", escape_html(&mcp_url))).into_response()
+    page("Account", &format!("<h1>Your Ownstate account</h1><p><a href=/account/conversations>View saved chats</a></p><h2>Connect an AI app</h2><p>Add this remote MCP address in a supported client: <code>{}</code>. Sign in with Ownstate and choose your personal or organization space. Your OAuth connection is saved across sessions and can be revoked here. Connect separately for each space you want available.</p><p>In Claude, add a custom Web connector using this MCP address and choose Ownstate sign-in. The manual token form below is for local adapters or clients without OAuth.</p><p class=muted>The remote connector receives only the Ownstate tools you use. To save supported local chat events automatically, install a local capture adapter.</p><h2>Manual connection for local adapters</h2><p>Create a scoped token for a local capture adapter or a client that cannot sign in with OAuth. Keep the token private.</p><form method=post action=/connections><label>Client name</label><input name=client_name placeholder='Local adapter name' maxlength=100 required><label>Ownstate space</label><select name=workspace_id required>{options}</select><button>Create connection</button></form><h2>Active connections</h2><ul>{connection_rows}</ul><h2>Organizations</h2><ul>{organizations}</ul><form method=post action=/organizations><label>New organization name</label><input name=name maxlength=200 required><button>Create organization</button></form><form method=post action=/logout><button>Sign out</button></form>", escape_html(&mcp_url))).into_response()
 }
 
 pub async fn conversations_page(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -619,6 +619,15 @@ pub async fn create_connection(
                 .unwrap_or_default();
             page("Connection created", &format!("<h1>Connection created</h1><p>Copy this token now. It will not be shown again.</p><p><code>{}</code></p><p>MCP server: <code>{mcp_url}</code></p><p>Send the token as <code>Authorization: Bearer &lt;token&gt;</code> when configuring your client.</p><p><a href=/account>Back to account</a></p>", connection.token)).into_response()
         }
+        Err(ownstate_services::ServiceError::Forbidden(_)) => (
+            StatusCode::CONFLICT,
+            page(
+                "Space changed",
+                "<h1>Your space changed</h1><p>Reload your account page and create this connection again.</p><p><a href=/account>Return to account</a></p>",
+            ),
+        )
+            .into_response(),
+        Err(ownstate_services::ServiceError::Validation(_)) => StatusCode::BAD_REQUEST.into_response(),
         Err(e) => {
             tracing::error!(error=%e,"connection provisioning failed");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
