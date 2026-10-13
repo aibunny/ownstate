@@ -328,6 +328,47 @@ async fn mcp_client_retrieves_the_same_knowledge_as_http_services() {
     assert_eq!(stored.proposed_by, ownstate_domain::ProposerKind::Agent);
     assert_eq!(stored.status, ownstate_domain::CandidateStatus::Pending);
 
+    // Both evidence-writing tools accept the shapes advertised to clients.
+    let recorded = client
+        .call_tool(
+            CallToolRequestParams::new("record").with_arguments(
+                serde_json::json!({
+                    "project_id": project.id.to_string(),
+                    "event_type": "ASSISTANT_MESSAGE",
+                    "actor_type": "ASSISTANT",
+                    "content": "Observed a sample project decision.",
+                    "source_event_id": "mcp-roundtrip-project-event",
+                    "metadata": {"review_fixture": true}
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+    assert!(text_content(&recorded)["event_id"].is_string());
+
+    let chat_event = client
+        .call_tool(
+            CallToolRequestParams::new("record_conversation").with_arguments(
+                serde_json::json!({
+                    "source": "mcp-roundtrip",
+                    "source_conversation_id": "review-fixture-chat",
+                    "source_event_id": "mcp-roundtrip-chat-event",
+                    "event_type": "USER_MESSAGE",
+                    "actor_type": "USER",
+                    "content": "A sample non-project chat event."
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+    assert!(text_content(&chat_event)["event_id"].is_string());
+
     // Workspace resolution: bootstrap with NO project argument resolves the
     // project from the (injected) workspace directory name, creates it on
     // first use, and records the git origin.
