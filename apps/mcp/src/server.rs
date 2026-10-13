@@ -184,6 +184,7 @@ pub struct RecordParams {
     /// Security classification. Defaults to INTERNAL.
     pub security_classification: Option<String>,
     /// Opaque metadata (JSON object, bounded).
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")]
     pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
 }
 

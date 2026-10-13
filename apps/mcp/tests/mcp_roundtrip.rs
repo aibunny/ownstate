@@ -140,9 +140,9 @@ async fn mcp_client_retrieves_the_same_knowledge_as_http_services() {
         .find(|tool| tool.name == "record")
         .unwrap();
     let metadata_schema = &record_tool.input_schema["properties"]["metadata"];
-    assert!(
-        metadata_schema.to_string().contains("object"),
-        "metadata must have an object type: {metadata_schema}"
+    assert_eq!(
+        metadata_schema["type"], "object",
+        "Claude requires one explicit object type for metadata: {metadata_schema}"
     );
     for tool in &tools.tools {
         let annotations = serde_json::to_value(&tool.annotations).unwrap();
