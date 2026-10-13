@@ -238,7 +238,7 @@ impl OwnstateMcp {
     }
 
     #[tool(
-        description = "Append one observable event to a non-project chat. Reuse a stable conversation ID and event ID. MCP calls only capture what the client elects to send; they do not expose an entire chat transcript automatically.",
+        description = "Append one observable event to a non-project chat using a stable conversation ID and event ID. MCP calls capture only content the client sends through this tool; they do not expose an entire chat transcript automatically.",
         annotations(
             title = "Record Chat Event",
             read_only_hint = false,
@@ -441,9 +441,9 @@ impl OwnstateMcp {
 
     #[tool(
         description = "Load a project's current knowledge state: summary counts plus the most \
-                       recent ACTIVE knowledge with provenance. Call this once at the start of \
-                       a session. With no arguments the project is resolved from the current \
-                       workspace directory (created on first use, git origin recorded).",
+                       recent ACTIVE knowledge with provenance. With no arguments the project \
+                       is resolved from the current workspace directory (created on first use, \
+                       git origin recorded).",
         annotations(
             title = "Load Project Context",
             read_only_hint = false,
@@ -617,10 +617,9 @@ impl OwnstateMcp {
     }
 
     #[tool(
-        description = "Record an observable event as append-only evidence. This is the \
-                       non-negotiable write path for capture. It does NOT update canonical \
-                       truth, promote knowledge, or delete/rewrite existing data. The model \
-                       provides observable facts; Ownstate determines derived state.",
+        description = "Record an observable event as append-only project evidence. This tool \
+                       does not update canonical knowledge, promote proposals, or delete or \
+                       rewrite existing data.",
         annotations(
             title = "Record Project Event",
             read_only_hint = false,
@@ -723,10 +722,9 @@ impl ServerHandler for OwnstateMcp {
             .enable_tools()
             .build();
         info.instructions = Some(
-            "Ownstate is a persistent, model-agnostic knowledge layer. Use \
-             bootstrap_project at session start, search_knowledge for task-specific \
-             context, get_knowledge for version history and provenance, and \
-             propose_knowledge to record new durable learnings as candidates."
+            "Ownstate stores authorized project context, evidence, and proposed \
+             knowledge. Its tools retrieve current knowledge and provenance, \
+             compile context, and record explicitly submitted events or proposals."
                 .into(),
         );
         info
