@@ -134,6 +134,16 @@ async fn mcp_client_retrieves_the_same_knowledge_as_http_services() {
     // Tools are advertised.
     let tools = client.list_tools(Default::default()).await.unwrap();
     let names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
+    let record_tool = tools
+        .tools
+        .iter()
+        .find(|tool| tool.name == "record")
+        .unwrap();
+    let metadata_schema = &record_tool.input_schema["properties"]["metadata"];
+    assert!(
+        metadata_schema.to_string().contains("object"),
+        "metadata must have an object type: {metadata_schema}"
+    );
     for tool in &tools.tools {
         let annotations = serde_json::to_value(&tool.annotations).unwrap();
         assert!(

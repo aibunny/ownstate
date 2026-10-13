@@ -184,7 +184,7 @@ pub struct RecordParams {
     /// Security classification. Defaults to INTERNAL.
     pub security_classification: Option<String>,
     /// Opaque metadata (JSON object, bounded).
-    pub metadata: Option<serde_json::Value>,
+    pub metadata: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -697,7 +697,7 @@ impl OwnstateMcp {
             commit_sha: p.commit_sha,
             file_path: p.file_path,
             security_classification,
-            metadata: p.metadata,
+            metadata: p.metadata.map(serde_json::Value::Object),
         };
 
         let events = services
