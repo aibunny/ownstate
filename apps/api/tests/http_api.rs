@@ -91,10 +91,18 @@ async fn streamable_http_mcp_requires_only_the_dedicated_token() {
     );
     let (status, body) = send(&app, authorize(initialize(), "mcp-token")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(
-        body.to_string().contains("Ownstate is a persistent"),
-        "{body}"
-    );
+    let message: Value = if let Some(stream) = body.as_str() {
+        stream
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:").map(str::trim))
+            .filter(|payload| !payload.is_empty())
+            .find_map(|payload| serde_json::from_str(payload).ok())
+            .unwrap_or_else(|| panic!("missing MCP initialize response: {body}"))
+    } else {
+        body.clone()
+    };
+    assert_eq!(message["result"]["protocolVersion"], "2025-03-26");
+    assert!(message["result"]["capabilities"]["tools"].is_object());
 }
 
 #[tokio::test]
