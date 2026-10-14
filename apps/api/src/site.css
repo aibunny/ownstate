@@ -84,9 +84,9 @@ button:active, .primary-link:active { transform: none; }
 .connection-row button { min-height: 35px; padding: 7px 11px; }
 .empty-state { margin: 22px 0 0; padding: 18px; background: #0a1314; border: 1px dashed #49615c; color: var(--quiet); font-size: 13px; }
 .manage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; margin-top: 26px; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+.form-row { display: grid; grid-template-columns: .8fr 1.2fr; gap: 12px; align-items: end; }
 .form-row label { margin-top: 14px; }
-.form-row button { white-space: nowrap; }
+.form-row button { grid-column: 1 / -1; justify-self: start; white-space: nowrap; }
 .subsection-heading { margin: 28px 0 0; }
 .org-item { margin-bottom: 20px; }
 .org-item > strong { display: block; font-size: 14px; }
