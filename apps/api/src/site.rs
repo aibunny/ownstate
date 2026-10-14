@@ -158,8 +158,19 @@ impl SignupConfig {
 }
 
 pub(crate) fn page(title: &str, body: &str) -> Html<String> {
+    let layout = match title {
+        "Account" | "Saved chats" | "Saved chat" => "workspace",
+        _ => "focused",
+    };
+    let body = if layout == "focused" {
+        format!("<div class=auth-card>{body}</div>")
+    } else {
+        body.to_string()
+    };
     Html(format!(
-        r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><title>{title} · Ownstate</title><style>body{{font:16px/1.5 system-ui,sans-serif;background:#f5f4ef;color:#1f2724;margin:0}}main{{max-width:520px;margin:8vh auto;padding:2rem;background:white;border:1px solid #d5d9d1;border-radius:16px}}h1{{font-size:1.7rem}}label{{display:block;margin:1rem 0 .3rem}}input{{box-sizing:border-box;width:100%;padding:.75rem;border:1px solid #89948a;border-radius:8px;font:inherit}}button{{margin-top:1.25rem;padding:.75rem 1.2rem;border:0;border-radius:8px;background:#174f3c;color:white;font:inherit;cursor:pointer}}a{{color:#174f3c}}code{{overflow-wrap:anywhere}}.muted{{color:#5c675e}}</style></head><body><main>{body}</main></body></html>"#
+        r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta name="theme-color" content="#080e0f"><title>{title} · Ownstate</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet"><style>{css}</style></head><body class="{layout}"><header class="topbar"><a class="wordmark" href="/account" aria-label="Ownstate account"><span class="brand-mark" aria-hidden="true">{mark}</span><span>OWNSTATE</span></a><nav aria-label="Account navigation"><a href="/account">Overview</a><a href="/account/conversations">Saved chats</a></nav><span class="header-label">YOUR STATE, IN YOUR HANDS</span></header><main>{body}</main><footer class="site-footer"><span>OWNSTATE / YOUR CONTEXT LIVES HERE</span><span>Evidence stays connected to what you know.</span></footer></body></html>"##,
+        css = include_str!("site.css"),
+        mark = include_str!("site-mark.svg"),
     ))
 }
 
@@ -345,7 +356,7 @@ pub async fn signup_page(
     page(
         "Sign up",
         &format!(
-            "<h1>Create your Ownstate account</h1><p class=muted>Your personal memory stays connected across supported AI sessions.</p><form method=post action=/signup><input type=hidden name=next value=\"{}\"><label>Email</label><input type=email name=email autocomplete=email required><label>Password (at least 12 characters)</label><input type=password name=password minlength=12 autocomplete=new-password required><button>Create account</button></form><h2>Need a new verification link?</h2><form method=post action=/verify/resend><label>Email</label><input type=email name=email required><button>Resend link</button></form><p><a href=/login>Already have an account?</a></p>",
+            "<p class=eyebrow>Begin / Your own space</p><h1>Keep what you learn.</h1><p class=muted>Create an Ownstate account to carry your context across supported AI apps.</p><form method=post action=/signup><input type=hidden name=next value=\"{}\"><label>Email<input type=email name=email autocomplete=email required></label><label>Password (at least 12 characters)<input type=password name=password minlength=12 autocomplete=new-password required></label><button>Create account <span aria-hidden=true>↗</span></button></form><div class=secondary-form><h2>Need another verification link?</h2><form method=post action=/verify/resend><label>Email<input type=email name=email autocomplete=email required></label><button class=button-quiet>Resend link</button></form></div><p class=foot-link>Already have an account? <a href=/login>Sign in</a></p>",
             escape_html(safe_next(next.next.as_deref()))
         ),
     )
@@ -432,7 +443,7 @@ pub async fn login_page(Query(next): Query<LoginNext>) -> impl IntoResponse {
     page(
         "Sign in",
         &format!(
-            "<h1>Sign in to Ownstate</h1><form method=post action=/login><input type=hidden name=next value=\"{}\"><label>Email</label><input type=email name=email autocomplete=email required><label>Password</label><input type=password name=password autocomplete=current-password required><button>Sign in</button></form><p><a href=/signup?next={signup_next}>Create an account</a></p>",
+            "<p class=eyebrow>Welcome back / Ownstate</p><h1>Return to your state.</h1><p class=muted>Sign in to see your spaces, connected apps, and saved chats.</p><form method=post action=/login><input type=hidden name=next value=\"{}\"><label>Email<input type=email name=email autocomplete=email required></label><label>Password<input type=password name=password autocomplete=current-password required></label><button>Sign in <span aria-hidden=true>↗</span></button></form><p class=foot-link>New to Ownstate? <a href=/signup?next={signup_next}>Create an account</a></p>",
             escape_html(safe_next(next.next.as_deref()))
         ),
     )
@@ -481,17 +492,43 @@ pub async fn account_page(State(state): State<AppState>, headers: HeaderMap) -> 
         })
         .collect::<String>();
     let organizations = workspaces.iter().filter(|space| space.kind == "ORGANIZATION")
-        .map(|space| format!("<li>{} <form method=post action=/invitations><input type=hidden name=workspace_id value=\"{}\"><label>Invite by email</label><input type=email name=email required><button>Send invitation</button></form></li>",escape_html(&space.name),space.workspace_id)).collect::<String>();
+        .map(|space| format!("<li class=org-item><strong>{}</strong><form method=post action=/invitations><input type=hidden name=workspace_id value=\"{}\"><label>Invite by email<input type=email name=email autocomplete=email placeholder='name@example.com' required></label><button class=button-quiet>Send invite</button></form></li>",escape_html(&space.name),space.workspace_id)).collect::<String>();
+    let organization_count = workspaces
+        .iter()
+        .filter(|space| space.kind == "ORGANIZATION")
+        .count();
+    let organization_rows = if organizations.is_empty() {
+        "<p class=empty-state>No organizations yet. Create one to share a separate space with your team.</p>".to_string()
+    } else {
+        format!("<ul class=list-clean>{organizations}</ul>")
+    };
     let Ok(connections) = state.services.account_connections(account).await else {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     };
-    let connection_rows = connections.iter().map(|c| format!("<li><strong>{}</strong> · {} · {}<form method=post action=/connections/revoke><input type=hidden name=connection_id value=\"{}\"><button>Revoke</button></form></li>", escape_html(&c.client_name), escape_html(&c.workspace_name), c.created_at.format("%Y-%m-%d"), c.id)).collect::<String>();
+    let connection_rows = connections.iter().map(|c| format!("<li class=connection-row><div><strong>{}</strong><small>{} · connected {}</small></div><form method=post action=/connections/revoke><input type=hidden name=connection_id value=\"{}\"><button class=button-danger aria-label='Revoke {} connection'>Revoke</button></form></li>", escape_html(&c.client_name), escape_html(&c.workspace_name), c.created_at.format("%Y-%m-%d"), c.id, escape_html(&c.client_name))).collect::<String>();
+    let connection_rows = if connection_rows.is_empty() {
+        "<p class=empty-state>No manual connections yet. Apps that sign in through Ownstate can connect with the address above.</p>".to_string()
+    } else {
+        format!("<ul class=list-clean>{connection_rows}</ul>")
+    };
     let mcp_url = state
         .signup_config
         .as_ref()
         .map(|config| format!("{}/mcp", config.public_url))
         .unwrap_or_default();
-    page("Account", &format!("<h1>Your Ownstate account</h1><p><a href=/account/conversations>View saved chats</a></p><h2>Connect an AI app</h2><p>Add this remote MCP address in a supported client: <code>{}</code>. Sign in with Ownstate and choose your personal or organization space. Your OAuth connection is saved across sessions and can be revoked here. Connect separately for each space you want available.</p><p>In Claude, add a custom Web connector using this MCP address and choose Ownstate sign-in. The manual token form below is for local adapters or clients without OAuth.</p><p class=muted>The remote connector receives only the Ownstate tools you use. To save supported local chat events automatically, install a local capture adapter.</p><h2>Manual connection for local adapters</h2><p>Create a scoped token for a local capture adapter or a client that cannot sign in with OAuth. Keep the token private.</p><form method=post action=/connections><label>Client name</label><input name=client_name placeholder='Local adapter name' maxlength=100 required><label>Ownstate space</label><select name=workspace_id required>{options}</select><button>Create connection</button></form><h2>Active connections</h2><ul>{connection_rows}</ul><h2>Organizations</h2><ul>{organizations}</ul><form method=post action=/organizations><label>New organization name</label><input name=name maxlength=200 required><button>Create organization</button></form><form method=post action=/logout><button>Sign out</button></form>", escape_html(&mcp_url))).into_response()
+    page("Account", &format!(r#"
+        <section class="workspace-hero"><div><p class="eyebrow">Your Ownstate workspace</p><h1>Keep your context. <em>Change your tools.</em></h1><p class="supporting">Your saved knowledge and conversations live in the space you choose, ready for the AI apps you connect.</p></div><a class="primary-link" href="/account/conversations">View saved chats <span aria-hidden="true">↗</span></a></section>
+        <div class="summary-strip" aria-label="Workspace overview"><div class="summary-item"><strong>{space_count}</strong><span>Your spaces</span></div><div class="summary-item"><strong>{connection_count}</strong><span>Manual connections</span></div><div class="summary-item"><strong>{organization_count}</strong><span>Organizations</span></div></div>
+        <div class="dashboard-grid"><section class="panel"><p class="section-label">Connect / OAuth</p><h2>Connect an AI app</h2><p class="supporting">Add this MCP address in a supported app, then sign in with Ownstate. Choose your Personal space or an organization. The sign-in stays connected across sessions.</p><code class="connection-address">{mcp_url}</code><ol class="steps"><li><span>01 / ADD</span>Use the address above in your app's connector settings.</li><li><span>02 / SIGN IN</span>Sign in to Ownstate when the app asks.</li><li><span>03 / CHOOSE</span>Select the space the app can access.</li></ol><p class="note">In Claude, add a custom Web connector. The connector can use only the Ownstate tools you approve. Complete chat history is not captured automatically.</p></section>
+        <section class="panel"><div class="panel-header"><div><p class="section-label">Continuity / Chats</p><h2>Saved chats</h2></div><a href="/account/conversations">Explore ↗</a></div><p class="supporting">See the conversation events that connected clients have sent to Ownstate. Each chat keeps its source and space visible.</p><p class="empty-state">Clients may send only part of a conversation. Open saved chats to see exactly what was recorded.</p></section></div>
+        <div class="manage-grid"><section class="panel"><p class="section-label">Access / Manual</p><h2>Manual connections</h2><p class="supporting">Create a scoped token for local adapters or clients without Ownstate sign-in. Keep the token private.</p><form class="form-row" method=post action=/connections><label>Client name<input name=client_name placeholder='Local adapter name' maxlength=100 required></label><label>Ownstate space<select name=workspace_id required>{options}</select></label><button>Create connection</button></form><h3 style="margin:34px 0 0">Active connections</h3>{connection_rows}</section>
+        <section class="panel"><p class="section-label">Spaces / Teams</p><h2>Organizations</h2><p class="supporting">Each organization has its own space. Invite collaborators only to the one they should use.</p>{organization_rows}<div class="org-create"><h3>Create an organization</h3><form method=post action=/organizations><label>Organization name<input name=name maxlength=200 placeholder='Your team' required></label><button>Create</button></form></div></section></div>
+        <div class="account-actions"><form method=post action=/logout><button class=button-quiet>Sign out</button></form></div>
+    "#,
+        space_count = workspaces.len(),
+        connection_count = connections.len(),
+        mcp_url = escape_html(&mcp_url),
+    )).into_response()
 }
 
 pub async fn conversations_page(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -508,7 +545,7 @@ pub async fn conversations_page(State(state): State<AppState>, headers: HeaderMa
         .iter()
         .map(|c| {
             format!(
-                "<li><a href=/account/conversations/{}>{}</a> · {} · {} · {}</li>",
+                "<li><a href=/account/conversations/{}><strong>{}</strong><span aria-hidden=true>↗</span><small>{} / {} / {}</small></a></li>",
                 c.id,
                 escape_html(c.title.as_deref().unwrap_or("Untitled chat")),
                 escape_html(&c.source),
@@ -517,7 +554,12 @@ pub async fn conversations_page(State(state): State<AppState>, headers: HeaderMa
             )
         })
         .collect::<String>();
-    page("Saved chats", &format!("<h1>Saved chats</h1><p class=muted>These are the events each client sent to Ownstate. Some clients send only part of a chat.</p><ul>{rows}</ul><p><a href=/account>Back to account</a></p>")).into_response()
+    let rows = if rows.is_empty() {
+        "<p class=empty-state>No chats saved yet. When a connected app sends conversation events, they will appear here.</p>".to_string()
+    } else {
+        format!("<ul class=chat-list>{rows}</ul>")
+    };
+    page("Saved chats", &format!("<section class=workspace-hero><div><p class=eyebrow>Continuity / Conversations</p><h1>Saved <em>chats.</em></h1><p class=supporting>These are the events connected clients sent to Ownstate. Some clients send only part of a chat.</p></div></section>{rows}<a class=back-link href=/account>← Back to overview</a>")).into_response()
 }
 
 pub async fn conversation_page(
@@ -548,14 +590,15 @@ pub async fn conversation_page(
         .iter()
         .map(|e| {
             format!(
-                "<article><strong>{}</strong><p style='white-space:pre-wrap'>{}</p></article>",
+                "<article class=event-card><strong>{}</strong><p>{}</p></article>",
                 escape_html(&e.actor_type),
                 escape_html(e.content.as_deref().unwrap_or(""))
             )
         })
         .collect::<String>();
-    page("Saved chat", &format!("<h1>{}</h1><p class=muted>{} · {}</p>{rows}<p><a href=/account/conversations>All saved chats</a></p>",
-        escape_html(thread.title.as_deref().unwrap_or("Untitled chat")), escape_html(&thread.source), escape_html(&thread.space))).into_response()
+    page("Saved chat", &format!("<section class=workspace-hero><div><p class=eyebrow>Saved chat / {}</p><h1>{}</h1><p class=supporting>Space: {}</p></div></section><div class=event-list>{rows}</div><a class=back-link href=/account/conversations>← All saved chats</a>",
+        escape_html(&thread.source),
+        escape_html(thread.title.as_deref().unwrap_or("Untitled chat")), escape_html(&thread.space))).into_response()
 }
 
 pub async fn revoke_connection(
