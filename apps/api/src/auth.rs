@@ -24,7 +24,18 @@ pub async fn require_bearer(
     next: Next,
 ) -> Response {
     let principal = match bearer_hash(request.headers()) {
-        Some(digest) => state.services.authenticate_digest(&digest).await.ok(),
+        Some(digest) => {
+            if state
+                .services
+                .is_mcp_credential(&digest)
+                .await
+                .unwrap_or(false)
+            {
+                None
+            } else {
+                state.services.authenticate_digest(&digest).await.ok()
+            }
+        }
         None => state.personal_fallback.clone(),
     };
     match principal {
@@ -51,20 +62,73 @@ pub async fn require_mcp_bearer(
 ) -> Response {
     let expected = state.mcp_principal.as_ref().map(|principal| principal.id());
     let principal = match bearer_hash(request.headers()) {
-        Some(digest) => state.services.authenticate_digest(&digest).await.ok(),
+        Some(digest) => {
+            let principal = state.services.authenticate_digest(&digest).await.ok();
+            let is_legacy = principal.as_ref().is_some_and(|p| Some(p.id()) == expected);
+            let is_account = state.account_mcp_enabled
+                && state
+                    .services
+                    .is_active_mcp_connection(&digest)
+                    .await
+                    .unwrap_or(false);
+            if is_legacy || is_account {
+                principal
+            } else {
+                None
+            }
+        }
         None => None,
     };
-    match (principal, expected) {
-        (Some(principal), Some(expected)) if principal.id() == expected => {
+    match principal {
+        Some(principal) => {
             request.extensions_mut().insert(principal);
             next.run(request).await
         }
-        _ => (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({
+        _ => {
+            let mut response = (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({
                 "error": { "code": "unauthorized", "message": "missing or invalid MCP bearer token" }
-            })),
-        )
-            .into_response(),
+                })),
+            ).into_response();
+            if let Some(config) = &state.signup_config {
+                let challenge = format!(
+                    "Bearer resource_metadata=\"{}/.well-known/oauth-protected-resource/mcp\", scope=\"ownstate:access\"",
+                    config.public_url,
+                );
+                if let Ok(value) = challenge.parse() {
+                    response
+                        .headers_mut()
+                        .insert(header::WWW_AUTHENTICATE, value);
+                }
+            }
+            response
+        }
     }
+}
+
+/// Host adapters may append observable chat events using the account's MCP
+/// connection. The connection is resolved on every request, including revoke.
+pub async fn require_capture_bearer(
+    State(state): State<AppState>,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    let Some(digest) = bearer_hash(request.headers()) else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    if !state.account_mcp_enabled
+        || !state
+            .services
+            .is_active_mcp_connection(&digest)
+            .await
+            .unwrap_or(false)
+    {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let Ok(principal) = state.services.authenticate_digest(&digest).await else {
+        return StatusCode::UNAUTHORIZED.into_response();
+    };
+    request.extensions_mut().insert(principal);
+    next.run(request).await
 }

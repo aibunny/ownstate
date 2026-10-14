@@ -85,3 +85,12 @@ define_id!(AgentExecutionId);
 define_id!(PolicyDecisionId);
 define_id!(ScopeHandleId);
 define_id!(CaptureAssessmentId);
+
+impl ScopeHandleId {
+    /// Generate an opaque, non-time-ordered handle identifier. Scope handles
+    /// are references exposed to untrusted clients, so unlike internal row IDs
+    /// they must not reveal creation time or form a predictable sequence.
+    pub fn generate_opaque() -> Self {
+        Self(Uuid::new_v4())
+    }
+}

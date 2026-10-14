@@ -5,12 +5,16 @@
 //! logic. Tenant scope is fixed at construction (single-tenant personal mode)
 //! and applied to every query before data is read.
 
+pub mod accounts;
 pub mod bootstrap;
 pub mod context;
+pub mod conversations;
 pub mod error;
 pub mod institutional;
 pub mod jobs;
 pub mod knowledge;
+pub mod oauth;
+pub mod organizations;
 pub mod policy;
 pub mod projects;
 pub mod query;
@@ -50,6 +54,18 @@ impl AppServices {
     pub fn with_max_classification(mut self, ceiling: SecurityClassification) -> Self {
         self.max_classification = ceiling;
         self
+    }
+
+    /// Construct a request-scoped service view for a verified principal's
+    /// tenant. The caller must obtain that tenant from authentication, never
+    /// from model-supplied arguments.
+    pub fn for_tenant(&self, tenant_id: TenantId) -> Self {
+        Self {
+            pool: self.pool.clone(),
+            embedder: Arc::clone(&self.embedder),
+            tenant_id,
+            max_classification: self.max_classification,
+        }
     }
 
     pub fn pool(&self) -> &PgPool {

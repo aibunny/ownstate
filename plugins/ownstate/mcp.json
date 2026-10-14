@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "ownstate": {
+      "type": "streamable-http",
+      "url": "https://api-production-8889.up.railway.app/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": {
+              "mode": "dcr"
+            },
+            "baseScopes": ["ownstate:access", "offline_access"]
+          }
+        }
+      }
+    }
+  }
+}

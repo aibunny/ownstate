@@ -17,6 +17,7 @@ ownstate-services = { workspace = true }
 
 chrono = { workspace = true }
 dotenvy = { workspace = true }
+http = "1"
 rmcp = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }

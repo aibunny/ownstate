@@ -35,7 +35,7 @@ pub async fn create_project(
 ) -> ApiResult<(StatusCode, Json<Project>)> {
     let project = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .create_project(CreateProject {
             name: req.name,
             description: req.description,
@@ -54,7 +54,7 @@ pub async fn get_project(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .get_project(id)
             .await?,
     ))
@@ -67,7 +67,7 @@ pub async fn create_session(
 ) -> ApiResult<(StatusCode, Json<Session>)> {
     let session = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .create_session(CreateSession {
             project_id: req.project_id,
             source: req.source,
@@ -91,7 +91,7 @@ pub async fn get_session(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .get_session(id)
             .await?,
     ))
@@ -105,7 +105,7 @@ pub async fn append_events(
 ) -> ApiResult<(StatusCode, Json<Vec<InteractionEvent>>)> {
     let events = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .append_events(id, req.events)
         .await?;
     Ok((StatusCode::CREATED, Json(events)))
@@ -119,7 +119,7 @@ pub async fn list_events(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .list_events(id)
             .await?,
     ))
@@ -132,7 +132,7 @@ pub async fn propose_knowledge(
 ) -> ApiResult<(StatusCode, Json<CandidateKnowledge>)> {
     let candidate = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .propose_knowledge(ProposeKnowledge {
             project_id: req.project_id,
             session_id: req.session_id,
@@ -157,7 +157,7 @@ pub async fn promote_candidate(
 ) -> ApiResult<Json<PromotionResponse>> {
     let (item, version) = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .promote_candidate(id)
         .await?;
     Ok(Json(PromotionResponse { item, version }))
@@ -174,7 +174,7 @@ pub async fn reject_candidate(
     }
     state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .reject_candidate(id, &req.reason)
         .await?;
     Ok(StatusCode::NO_CONTENT)
@@ -199,7 +199,7 @@ pub async fn search_knowledge(
 
     let hits = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .search_knowledge(SearchParams {
             project_id: q.project_id,
             query: q.q,
@@ -230,7 +230,7 @@ pub async fn get_knowledge(
 ) -> ApiResult<Json<KnowledgeDetailResponse>> {
     let detail = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .get_knowledge(id)
         .await?;
     Ok(Json(KnowledgeDetailResponse {
@@ -247,7 +247,7 @@ pub async fn compile_context(
 ) -> ApiResult<Json<CompiledContext>> {
     let compiled = state
         .services
-        .for_principal(principal)?
+        .for_verified_principal(principal)?
         .compile_context(ownstate_services::context::CompileRequest {
             project_id: req.project_id,
             task: req.task,
@@ -272,7 +272,7 @@ pub async fn execute_query(
     Ok(Json(
         state
             .services
-            .for_principal(principal)?
+            .for_verified_principal(principal)?
             .execute_query(plan)
             .await?,
     ))
