@@ -95,7 +95,7 @@ button:active, .primary-link:active { transform: none; }
 .org-item input { margin-top: 7px; }
 .org-item button { flex: none; }
 .org-create { padding-top: 24px; border-top: 1px solid var(--line); }
-.org-create form { display: flex; gap: 10px; align-items: end; }
+.org-create form:not(.form-row) { display: flex; gap: 10px; align-items: end; }
 .org-create label { flex: 1; }
 .org-create input { margin-top: 7px; }
 .account-actions { display: flex; justify-content: flex-end; margin-top: 26px; }
