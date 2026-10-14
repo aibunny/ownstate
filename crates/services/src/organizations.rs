@@ -188,7 +188,7 @@ async fn insert_member_grant(
 ) -> ServiceResult<()> {
     sqlx::query("INSERT INTO authorization_grants(id,tenant_id,principal_id,workspace_id,actions,classification_ceiling,allowed_destinations) VALUES($1,$2,$3,$4,$5,'CONFIDENTIAL',$6)")
         .bind(Uuid::new_v4()).bind(tenant).bind(principal).bind(workspace)
-        .bind(vec!["READ_PROJECT","READ_EVIDENCE","READ_KNOWLEDGE","COMPILE_CONTEXT","CREATE_PROJECT","CREATE_SESSION","APPEND_EVIDENCE","PROPOSE_KNOWLEDGE"])
+        .bind(vec!["READ_PROJECT","READ_EVIDENCE","READ_KNOWLEDGE","COMPILE_CONTEXT","CREATE_PROJECT","CREATE_SESSION","APPEND_EVIDENCE","PROPOSE_KNOWLEDGE","GENERATE_EMBEDDING","MODEL_EGRESS"])
         .bind(vec!["LOCAL:fastembed","LOCAL:deterministic"])
         .execute(&mut **tx).await?;
     Ok(())

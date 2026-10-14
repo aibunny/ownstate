@@ -8,6 +8,7 @@ use ownstate_domain::{TenantId, content_hash};
 use ownstate_embeddings::DeterministicProvider;
 use ownstate_services::AppServices;
 use ownstate_services::conversations::CaptureConversation;
+use ownstate_services::projects::CreateProject;
 use ownstate_storage::test_support::fresh_db;
 use sha2::{Digest, Sha256};
 
@@ -69,6 +70,20 @@ async fn account_connections_are_isolated_and_revocable() {
     let first_principal = app.authenticate_digest(&first_digest).await.unwrap();
     let second_principal = app.authenticate_digest(&second_digest).await.unwrap();
     assert_ne!(first_principal.tenant_id(), second_principal.tenant_id());
+    let first_services = app.for_verified_principal(first_principal.clone()).unwrap();
+    let sample = first_services
+        .create_project(CreateProject {
+            name: "Local context test".into(),
+            description: None,
+            ownership_domain: None,
+            metadata: None,
+        })
+        .await
+        .unwrap();
+    first_services
+        .bootstrap_project(sample.id, 5, None)
+        .await
+        .unwrap();
     let first_profile = app
         .for_verified_principal(first_principal.clone())
         .unwrap()

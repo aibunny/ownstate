@@ -298,7 +298,7 @@ impl AppServices {
             .await?;
         sqlx::query("INSERT INTO authorization_grants(id,tenant_id,principal_id,workspace_id,actions,classification_ceiling,allowed_destinations) VALUES($1,$2,$3,$4,$5,'CONFIDENTIAL',$6)")
             .bind(grant_id).bind(tenant_id).bind(principal_id).bind(workspace_id)
-            .bind(vec!["READ_PROJECT","READ_EVIDENCE","READ_KNOWLEDGE","COMPILE_CONTEXT","CREATE_PROJECT","CREATE_SESSION","APPEND_EVIDENCE","PROPOSE_KNOWLEDGE"])
+            .bind(vec!["READ_PROJECT","READ_EVIDENCE","READ_KNOWLEDGE","COMPILE_CONTEXT","CREATE_PROJECT","CREATE_SESSION","APPEND_EVIDENCE","PROPOSE_KNOWLEDGE","GENERATE_EMBEDDING","MODEL_EGRESS"])
             .bind(vec!["LOCAL:fastembed","LOCAL:deterministic"])
             .execute(&mut *tx).await?;
         sqlx::query("INSERT INTO account_tenant_memberships(account_id,tenant_id,user_id,principal_id,workspace_id,kind) VALUES($1,$2,$3,$4,$5,'PERSONAL')")
