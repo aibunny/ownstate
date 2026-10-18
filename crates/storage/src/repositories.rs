@@ -24,15 +24,21 @@ pub struct StoredRepository {
     pub created_at: DateTime<Utc>,
 }
 
-/// Insert or find a repository by internal key. The single INSERT/ON CONFLICT
-/// statement is the concurrency boundary: concurrent bootstrap requests for
-/// the same canonical repository return the same row.
+/// Insert or find a repository by internal key. A transaction lock serializes
+/// competing inserts for the same canonical origin because repositories also
+/// has a separate canonical-origin unique constraint. PostgreSQL may report
+/// that constraint before the ON CONFLICT internal-key arbiter can run.
 pub async fn upsert_repository(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: TenantId,
     workspace_id: ownstate_domain::WorkspaceId,
     locator: &RepositoryLocator,
 ) -> Result<StoredRepository, StorageError> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("{}:{}", tenant_id.as_uuid(), locator.canonical_uri))
+        .execute(&mut **tx)
+        .await?;
+
     let id = RepositoryId::generate();
     let now = Utc::now();
     let repository = sqlx::query_as::<_, StoredRepository>(
