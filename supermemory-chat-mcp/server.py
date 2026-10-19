@@ -170,7 +170,7 @@ def send_email(url: str, client_name: str) -> None:
     req = urllib.request.Request(
         "https://api.resend.com/emails",
         data=json.dumps(payload).encode(),
-        headers={"Authorization": f"Bearer {RESEND_KEY}", "Content-Type": "application/json"},
+        headers={"Authorization": f"Bearer {RESEND_KEY}", "Content-Type": "application/json", "User-Agent": "SupermemoryChatGateway/1.0"},
         method="POST",
     )
     try:
