@@ -77,6 +77,10 @@ def init_db() -> None:
           request_id TEXT NOT NULL,
           expires_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS approvals (
+          request_id TEXT PRIMARY KEY,
+          approved_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS codes (
           code_hash TEXT PRIMARY KEY,
           client_id TEXT NOT NULL,
@@ -99,6 +103,7 @@ def init_db() -> None:
         now = int(time.time())
         con.execute("DELETE FROM requests WHERE created_at<?", (now - 3600,))
         con.execute("DELETE FROM tickets WHERE expires_at<?", (now,))
+        con.execute("DELETE FROM approvals WHERE approved_at<? OR request_id NOT IN (SELECT id FROM requests)", (now - 3600,))
         con.execute("DELETE FROM codes WHERE expires_at<?", (now,))
         con.execute("DELETE FROM tokens WHERE kind='access' AND expires_at<?", (now,))
         con.execute("DELETE FROM mail_events WHERE created_at<?", (now - 3600,))
@@ -277,6 +282,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"issuer": PUBLIC_URL, "authorization_endpoint": PUBLIC_URL + "/authorize", "token_endpoint": PUBLIC_URL + "/token", "registration_endpoint": PUBLIC_URL + "/register", "revocation_endpoint": PUBLIC_URL + "/revoke", "response_types_supported": ["code"], "grant_types_supported": ["authorization_code", "refresh_token"], "code_challenge_methods_supported": ["S256"], "token_endpoint_auth_methods_supported": ["none"], "scopes_supported": SCOPE.split(), "service_documentation": PUBLIC_URL + "/"})
         if p.path == "/authorize":
             return self.authorize(urllib.parse.parse_qs(p.query))
+        if p.path == "/authorize/status":
+            return self.authorize_status(urllib.parse.parse_qs(p.query))
         if p.path == "/login/verify":
             return self.show_login(urllib.parse.parse_qs(p.query))
         if p.path == "/mcp":
@@ -352,7 +359,50 @@ class Handler(BaseHTTPRequestHandler):
             send_email(link, req["name"])
         except RuntimeError:
             return self.send(503, "Email delivery is unavailable. Please try again later.", content_type="text/plain")
-        self.send(200, f"<html><body style='font:16px system-ui;max-width:32rem;margin:8vh auto'><h1>Check your email</h1><p>Open the sign-in link sent to {html.escape(OWNER_EMAIL)}. The link expires in 10 minutes.</p></body></html>", content_type="text/html")
+        page = f"""<html><head><meta name='referrer' content='no-referrer'><title>Check your email</title></head>
+<body style='font:16px system-ui;max-width:32rem;margin:8vh auto'>
+<h1>Check your email</h1><p>Open the sign-in link sent to {html.escape(OWNER_EMAIL)}. The link expires in 10 minutes.</p>
+<p id='status'>After you approve, this page will finish the connection automatically.</p>
+<script>
+const requestId = {json.dumps(request_id)};
+async function check() {{
+  try {{
+    const response = await fetch('/authorize/status?request_id=' + encodeURIComponent(requestId), {{cache: 'no-store'}});
+    const result = await response.json();
+    if (result.status === 'approved') {{ window.location.replace(result.redirect); return; }}
+    if (result.status === 'expired') {{ document.getElementById('status').textContent = 'This link expired. Start connecting again.'; return; }}
+  }} catch (_) {{ /* Retry a temporary connection error. */ }}
+  setTimeout(check, 1500);
+}}
+check();
+</script></body></html>"""
+        self.send(200, page, content_type="text/html")
+
+    def authorize_status(self, q: dict) -> None:
+        request_id = q.get("request_id", [""])[-1]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", request_id):
+            return self.send(400, {"error": "invalid_request"})
+        now = int(time.time())
+        with db() as con:
+            con.execute("BEGIN IMMEDIATE")
+            row = con.execute("SELECT requests.*,approvals.approved_at FROM requests LEFT JOIN approvals ON requests.id=approvals.request_id WHERE requests.id=?", (request_id,)).fetchone()
+            if not row or row["created_at"] < now - 600:
+                return self.send(410, {"status": "expired"})
+            if row["approved_at"] is None:
+                return self.send(200, {"status": "pending"})
+            con.execute("DELETE FROM approvals WHERE request_id=?", (request_id,))
+            con.execute("DELETE FROM tickets WHERE request_id=?", (request_id,))
+            con.execute("DELETE FROM requests WHERE id=?", (request_id,))
+            code = random_token()
+            con.execute("INSERT INTO codes VALUES (?,?,?,?,?,?)", (digest(code), row["client_id"], row["redirect_uri"], row["challenge"], row["scope"], now + 180))
+        parts = urllib.parse.urlsplit(row["redirect_uri"])
+        params = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+        params.append(("code", code))
+        if row["state"]:
+            params.append(("state", row["state"]))
+        params.append(("iss", PUBLIC_URL))
+        redirect = urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path, urllib.parse.urlencode(params), parts.fragment))
+        self.send(200, {"status": "approved", "redirect": redirect})
 
     def show_login(self, q: dict) -> None:
         token = q.get("ticket", [""])[-1]
@@ -375,16 +425,9 @@ class Handler(BaseHTTPRequestHandler):
             if not row or row["expires_at"] < now or row["created_at"] < now - 600:
                 return self.send(400, "Sign-in link expired or already used", content_type="text/plain")
             con.execute("DELETE FROM tickets WHERE token_hash=?", (digest(token),))
-            con.execute("DELETE FROM requests WHERE id=?", (row["request_id"],))
-            code = random_token()
-            con.execute("INSERT INTO codes VALUES (?,?,?,?,?,?)", (digest(code), row["client_id"], row["redirect_uri"], row["challenge"], row["scope"], now + 180))
-        parts = urllib.parse.urlsplit(row["redirect_uri"])
-        params = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
-        params.append(("code", code))
-        if row["state"]:
-            params.append(("state", row["state"]))
-        params.append(("iss", PUBLIC_URL))
-        self.redirect(urllib.parse.urlunsplit((parts.scheme, parts.netloc, parts.path, urllib.parse.urlencode(params), parts.fragment)))
+            con.execute("DELETE FROM tickets WHERE request_id=?", (row["request_id"],))
+            con.execute("INSERT OR REPLACE INTO approvals VALUES (?,?)", (row["request_id"], now))
+        self.send(200, "<html><body style='font:16px system-ui;max-width:32rem;margin:8vh auto'><h1>Connection approved</h1><p>Return to the chat tab where you started. It will finish connecting automatically.</p></body></html>", content_type="text/html")
 
     def token(self) -> None:
         form = self.form()

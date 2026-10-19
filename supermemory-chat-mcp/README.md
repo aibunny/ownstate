@@ -14,6 +14,6 @@ Required environment variables:
 
 Optional: `DEFAULT_NAMESPACE` (defaults to `personal`), `PORT` (defaults to `8787`).
 
-Mount a Railway volume at `/data`. Publish the service through HTTPS and use `https://<domain>/mcp` as the connector URL. Never place the Supermemory API key in a browser connector. The gateway forwards only its four defined tools, and a user signs in by receiving a one-time link at `OWNER_EMAIL`.
+Mount a Railway volume at `/data`. Publish the service through HTTPS and use `https://<domain>/mcp` as the connector URL. Never place the Supermemory API key in a browser connector. The gateway forwards only its five defined tools. A user signs in through a one-time link sent to `OWNER_EMAIL`. The original connector tab waits for that email approval, then completes OAuth there, even if the email opens in another browser.
 
 Browser MCP tools are invoked by the assistant. They do not capture an entire Claude or ChatGPT transcript automatically. `add_memory` should store durable facts and decisions, not secrets or an unreviewed full conversation.
