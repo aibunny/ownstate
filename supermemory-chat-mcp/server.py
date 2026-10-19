@@ -209,7 +209,7 @@ def call_tool(name: str, args: dict) -> dict:
             raise ValueError("Query must be 1–500 characters")
         return api_post(path + "/search", {"query": query.strip()})
     if name == "get_profile":
-        return api_post(path + "/profile", {"q": ""})
+        return api_post(path + "/profile", {})
     if name == "add_memory":
         content = args.get("content")
         if not isinstance(content, str) or not 0 < len(content.strip()) <= 10000:

@@ -122,6 +122,10 @@ class GatewayTest(unittest.TestCase):
         spaces = json.loads(body)["result"]["structuredContent"]["namespaces"]
         self.assertEqual(spaces[0]["namespace"], "repo_demo")
         self.assertNotIn("system", spaces[0])
+        call["params"]["name"] = "get_profile"
+        status, _, body = self.json_post("/mcp", call, {"Authorization": "Bearer " + tokens["access_token"]})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["result"]["structuredContent"]["body"], {})
 
         status, _, body = self.form_post("/token", {"grant_type": "refresh_token", "client_id": client, "refresh_token": tokens["refresh_token"], "resource": self.gateway.RESOURCE})
         self.assertEqual(status, 200)
