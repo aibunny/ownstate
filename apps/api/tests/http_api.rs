@@ -91,10 +91,214 @@ async fn streamable_http_mcp_requires_only_the_dedicated_token() {
     );
     let (status, body) = send(&app, authorize(initialize(), "mcp-token")).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(
-        body.to_string().contains("Ownstate is a persistent"),
-        "{body}"
+    let message: Value = if let Some(stream) = body.as_str() {
+        stream
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:").map(str::trim))
+            .filter(|payload| !payload.is_empty())
+            .find_map(|payload| serde_json::from_str(payload).ok())
+            .unwrap_or_else(|| panic!("missing MCP initialize response: {body}"))
+    } else {
+        body.clone()
+    };
+    assert_eq!(message["result"]["protocolVersion"], "2025-03-26");
+    assert!(message["result"]["capabilities"]["tools"].is_object());
+}
+
+#[tokio::test]
+async fn business_mcp_and_chat_capture_use_account_connection() {
+    let db = fresh_db().await.unwrap();
+    let services = Arc::new(AppServices::new(
+        db.pool.clone(),
+        Arc::new(DeterministicProvider::new()),
+        TenantId::from_uuid(uuid::Uuid::from_u128(1)),
+    ));
+    let pending = services
+        .signup("connector@example.com", "long-password-for-connector")
+        .await
+        .unwrap();
+    services
+        .verify_signup(&pending.verification_token)
+        .await
+        .unwrap();
+    let account = services
+        .login("connector@example.com", "long-password-for-connector")
+        .await
+        .unwrap()
+        .account_id;
+    let workspace = services
+        .account_workspaces(account)
+        .await
+        .unwrap()
+        .remove(0)
+        .workspace_id;
+    let connection = services
+        .create_mcp_connection(account, workspace, "Codex")
+        .await
+        .unwrap();
+    let app = build_router(AppState::business(
+        services.clone(),
+        None,
+        vec!["ownstate.test".into()],
+    ));
+    let initialize = || {
+        post(
+            "/mcp",
+            json!({
+                "jsonrpc":"2.0", "id":1, "method":"initialize",
+                "params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}
+            }),
+        )
+    };
+    let mut request = initialize();
+    request
+        .headers_mut()
+        .insert(header::HOST, "ownstate.test".parse().unwrap());
+    request.headers_mut().insert(
+        header::ACCEPT,
+        "application/json, text/event-stream".parse().unwrap(),
     );
+    request.headers_mut().insert(
+        header::AUTHORIZATION,
+        format!("Bearer {}", connection.token).parse().unwrap(),
+    );
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let session_header = response.headers().get("mcp-session-id").cloned();
+    let _ = response.into_body().collect().await.unwrap();
+    let mut tool_call = post(
+        "/mcp",
+        json!({
+            "jsonrpc":"2.0","id":2,"method":"tools/call","params":{
+                "name":"record_conversation","arguments":{
+                    "source":"codex","source_conversation_id":"mcp-chat","source_event_id":"mcp-event-1",
+                    "event_type":"USER_MESSAGE","actor_type":"USER","content":"A general question"
+                }
+            }
+        }),
+    );
+    tool_call
+        .headers_mut()
+        .insert(header::HOST, "ownstate.test".parse().unwrap());
+    tool_call.headers_mut().insert(
+        header::ACCEPT,
+        "application/json, text/event-stream".parse().unwrap(),
+    );
+    tool_call.headers_mut().insert(
+        header::AUTHORIZATION,
+        format!("Bearer {}", connection.token).parse().unwrap(),
+    );
+    tool_call
+        .headers_mut()
+        .insert("mcp-protocol-version", "2025-03-26".parse().unwrap());
+    if let Some(session) = session_header {
+        tool_call.headers_mut().insert("mcp-session-id", session);
+    }
+    let (status, body) = send(&app, tool_call).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.to_string().contains("event_id"), "{body}");
+    let capture = || {
+        post(
+            "/capture/conversations",
+            json!({
+                "source":"codex","source_conversation_id":"general-chat","source_event_id":"u1",
+                "title":"General research","capture_mode":"PARTIAL_ADAPTER",
+                "event_type":"USER_MESSAGE","actor_type":"USER","content":"Hello"
+            }),
+        )
+    };
+    assert_eq!(send(&app, capture()).await.0, StatusCode::UNAUTHORIZED);
+    let mut request = capture();
+    request.headers_mut().insert(
+        header::AUTHORIZATION,
+        format!("Bearer {}", connection.token).parse().unwrap(),
+    );
+    let (status, body) = send(&app, request).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["duplicate"], false);
+    services
+        .revoke_account_connection(account, connection.connection_id)
+        .await
+        .unwrap();
+    let mut request = initialize();
+    request
+        .headers_mut()
+        .insert(header::HOST, "ownstate.test".parse().unwrap());
+    request.headers_mut().insert(
+        header::ACCEPT,
+        "application/json, text/event-stream".parse().unwrap(),
+    );
+    request.headers_mut().insert(
+        header::AUTHORIZATION,
+        format!("Bearer {}", connection.token).parse().unwrap(),
+    );
+    assert_eq!(send(&app, request).await.0, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn personal_deployment_can_keep_legacy_mcp_while_enabling_accounts() {
+    let db = fresh_db().await.unwrap();
+    let services = Arc::new(AppServices::new(
+        db.pool.clone(),
+        Arc::new(DeterministicProvider::new()),
+        TenantId::from_uuid(uuid::Uuid::from_u128(1)),
+    ));
+    let state = AppState::new(
+        services.clone(),
+        Some("legacy-api".into()),
+        None,
+        Some("legacy-mcp".into()),
+        vec!["ownstate.test".into()],
+    )
+    .await
+    .unwrap()
+    .enable_account_connections();
+    let pending = services
+        .signup("new-user@example.com", "long-password-for-new-user")
+        .await
+        .unwrap();
+    services
+        .verify_signup(&pending.verification_token)
+        .await
+        .unwrap();
+    let account = services
+        .login("new-user@example.com", "long-password-for-new-user")
+        .await
+        .unwrap()
+        .account_id;
+    let workspace = services
+        .account_workspaces(account)
+        .await
+        .unwrap()
+        .remove(0)
+        .workspace_id;
+    let connection = services
+        .create_mcp_connection(account, workspace, "OpenCode")
+        .await
+        .unwrap();
+    let app = build_router(state);
+    for token in ["legacy-mcp", connection.token.as_str()] {
+        let mut request = post(
+            "/mcp",
+            json!({
+                "jsonrpc":"2.0","id":1,"method":"initialize","params":{
+                    "protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}
+                }
+            }),
+        );
+        request
+            .headers_mut()
+            .insert(header::HOST, "ownstate.test".parse().unwrap());
+        request.headers_mut().insert(
+            header::ACCEPT,
+            "application/json, text/event-stream".parse().unwrap(),
+        );
+        request.headers_mut().insert(
+            header::AUTHORIZATION,
+            format!("Bearer {token}").parse().unwrap(),
+        );
+        assert_eq!(send(&app, request).await.0, StatusCode::OK);
+    }
 }
 
 async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Value) {

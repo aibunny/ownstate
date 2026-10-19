@@ -43,6 +43,40 @@ pub struct PersonalPolicyBootstrap {
     pub workspace_id: WorkspaceId,
     pub grant_id: GrantId,
 }
+
+pub async fn project_workspace_for_principal<'e>(
+    exec: impl sqlx::PgExecutor<'e>,
+    principal: &AuthenticatedPrincipal,
+) -> Result<Option<(WorkspaceId, OwnershipDomain)>> {
+    let workspace: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+        "SELECT w.id,w.organization_id FROM principals p \
+         JOIN authorization_grants g ON g.tenant_id=p.tenant_id AND g.principal_id=p.id \
+         JOIN workspaces w ON w.tenant_id=p.tenant_id AND w.id=g.workspace_id \
+         WHERE p.id=$1 AND p.tenant_id=$2 AND p.enabled \
+         AND g.revoked_at IS NULL AND g.valid_from<=clock_timestamp() \
+         AND (g.valid_until IS NULL OR g.valid_until>clock_timestamp()) \
+         AND 'CREATE_PROJECT'=ANY(g.actions) \
+         AND (p.kind <> 'USER' OR w.personal_user_id=p.subject_id \
+              OR EXISTS (SELECT 1 FROM organization_memberships om \
+                         WHERE om.tenant_id=p.tenant_id AND om.organization_id=w.organization_id \
+                         AND om.user_id=p.subject_id)) \
+         ORDER BY w.id LIMIT 1",
+    )
+    .bind(principal.id().as_uuid())
+    .bind(principal.tenant_id().as_uuid())
+    .fetch_optional(exec)
+    .await?;
+    Ok(workspace.map(|(id, organization)| {
+        (
+            id.into(),
+            if organization.is_some() {
+                OwnershipDomain::Organization
+            } else {
+                OwnershipDomain::Personal
+            },
+        )
+    }))
+}
 pub async fn bootstrap_personal_policy<'e>(
     exec: impl sqlx::PgExecutor<'e>,
     tenant: TenantId,

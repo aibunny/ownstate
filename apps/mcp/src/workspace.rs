@@ -13,7 +13,8 @@ pub struct Workspace {
     /// used as an identity factor so the same location resolves to the same
     /// project across clients.
     pub root_path: String,
-    /// `remote.origin.url` of the enclosing git repository, when present.
+    /// Credential-free canonical repository locator of the enclosing Git
+    /// repository, when present.
     pub git_origin: Option<String>,
 }
 
@@ -45,6 +46,22 @@ fn git_origin(dir: &Path) -> Option<String> {
     if !output.status.success() {
         return None;
     }
-    let url = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    (!url.is_empty() && url.len() <= 500).then_some(url)
+    let raw = String::from_utf8(output.stdout).ok()?;
+    ownstate_domain::normalize_remote(raw.trim())
+        .ok()
+        .map(|locator| locator.canonical_uri)
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    #[test]
+    fn canonicalization_strips_git_credentials_before_adapter_output() {
+        let locator = ownstate_domain::normalize_remote(
+            "https://token:secret@github.com/Acme/Project.git?token=secret",
+        )
+        .expect("test remote must normalize");
+        assert_eq!(locator.canonical_uri, "github.com/acme/project");
+        assert!(!locator.canonical_uri.contains("secret"));
+    }
 }

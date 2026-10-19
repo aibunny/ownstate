@@ -42,21 +42,30 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!("OWNSTATE_API_TOKEN is not set: API runs UNAUTHENTICATED (dev only)");
     }
 
+    let signup_config =
+        ownstate_api::site::SignupConfig::from_env().map_err(RuntimeError::Config)?;
     let state = match config.deployment_mode {
         DeploymentMode::Personal => {
-            AppState::new(
+            let state = AppState::new(
                 services,
                 config.api_token.clone(),
                 config.admin_token.clone(),
                 config.mcp_token.clone(),
                 mcp_allowed_hosts,
             )
-            .await?
+            .await?;
+            if signup_config.is_some() {
+                state.enable_account_connections()
+            } else {
+                state
+            }
         }
         DeploymentMode::Business => {
-            if config.api_token.is_none() && config.admin_token.is_none() {
+            if config.api_token.is_none() && config.admin_token.is_none() && signup_config.is_none()
+            {
                 return Err(RuntimeError::Config(
-                    "Business API requires an explicitly provisioned bearer credential".into(),
+                    "Business API requires a provisioned bearer credential or signup configuration"
+                        .into(),
                 )
                 .into());
             }
@@ -79,6 +88,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             AppState::business(services, mcp_principal, mcp_allowed_hosts)
         }
     };
+    let state = state.with_signup_config(signup_config);
     let app = build_router(state);
 
     let listener = tokio::net::TcpListener::bind(config.http_addr).await?;

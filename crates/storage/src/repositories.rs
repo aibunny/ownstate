@@ -24,35 +24,33 @@ pub struct StoredRepository {
     pub created_at: DateTime<Utc>,
 }
 
-/// Insert or find a repository by internal key. Uses a transactional upsert
-/// to guarantee idempotency under concurrent bootstrap.
+/// Insert or find a repository by internal key. A transaction lock serializes
+/// competing inserts for the same canonical origin because repositories also
+/// has a separate canonical-origin unique constraint. PostgreSQL may report
+/// that constraint before the ON CONFLICT internal-key arbiter can run.
 pub async fn upsert_repository(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: TenantId,
     workspace_id: ownstate_domain::WorkspaceId,
     locator: &RepositoryLocator,
 ) -> Result<StoredRepository, StorageError> {
-    // Try to find existing by internal key
-    let existing = sqlx::query_as::<_, StoredRepository>(
-        "SELECT id, tenant_id, workspace_id, canonical_origin, provider, owner_name, repo_name, internal_key, fork_of_repository_id, metadata, created_at
-         FROM repositories
-         WHERE tenant_id = $1 AND internal_key = $2"
-    )
-    .bind(tenant_id.as_uuid())
-    .bind(&locator.internal_key)
-    .fetch_optional(&mut **tx)
-    .await?;
-
-    if let Some(repo) = existing {
-        return Ok(repo);
-    }
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(format!("{}:{}", tenant_id.as_uuid(), locator.canonical_uri))
+        .execute(&mut **tx)
+        .await?;
 
     let id = RepositoryId::generate();
     let now = Utc::now();
-
-    sqlx::query(
+    let repository = sqlx::query_as::<_, StoredRepository>(
         "INSERT INTO repositories (id, tenant_id, workspace_id, canonical_origin, provider, owner_name, repo_name, internal_key, metadata, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (tenant_id, internal_key) WHERE internal_key <> ''
+         DO UPDATE SET internal_key = EXCLUDED.internal_key
+         WHERE repositories.workspace_id = EXCLUDED.workspace_id
+           AND repositories.canonical_origin = EXCLUDED.canonical_origin
+         RETURNING id, tenant_id, workspace_id, canonical_origin, provider,
+                   owner_name, repo_name, internal_key, fork_of_repository_id,
+                   metadata, created_at",
     )
     .bind(id.as_uuid())
     .bind(tenant_id.as_uuid())
@@ -64,21 +62,13 @@ pub async fn upsert_repository(
     .bind(&locator.internal_key)
     .bind(serde_json::json!({}))
     .bind(now)
-    .execute(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await?;
 
-    Ok(StoredRepository {
-        id: id.as_uuid(),
-        tenant_id: tenant_id.as_uuid(),
-        workspace_id: workspace_id.as_uuid(),
-        canonical_origin: locator.canonical_uri.clone(),
-        provider: locator.provider.as_str().to_string(),
-        owner_name: locator.owner.clone(),
-        repo_name: locator.repository_name.clone(),
-        internal_key: locator.internal_key.clone(),
-        fork_of_repository_id: None,
-        metadata: serde_json::json!({}),
-        created_at: now,
+    repository.ok_or_else(|| {
+        StorageError::Conflict(
+            "repository identity is already bound to a different workspace".to_string(),
+        )
     })
 }
 

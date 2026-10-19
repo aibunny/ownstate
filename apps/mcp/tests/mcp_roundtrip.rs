@@ -134,6 +134,50 @@ async fn mcp_client_retrieves_the_same_knowledge_as_http_services() {
     // Tools are advertised.
     let tools = client.list_tools(Default::default()).await.unwrap();
     let names: Vec<_> = tools.tools.iter().map(|t| t.name.as_ref()).collect();
+    let record_tool = tools
+        .tools
+        .iter()
+        .find(|tool| tool.name == "record")
+        .unwrap();
+    let metadata_schema = &record_tool.input_schema["properties"]["metadata"];
+    assert_eq!(
+        metadata_schema["type"], "object",
+        "Claude requires one explicit object type for metadata: {metadata_schema}"
+    );
+    for tool in &tools.tools {
+        let annotations = serde_json::to_value(&tool.annotations).unwrap();
+        assert!(
+            annotations["title"]
+                .as_str()
+                .is_some_and(|title| !title.is_empty()),
+            "missing title for {}",
+            tool.name
+        );
+        assert_eq!(annotations["destructiveHint"], false, "{}", tool.name);
+        assert_eq!(annotations["openWorldHint"], false, "{}", tool.name);
+    }
+    let profile_tool = tools
+        .tools
+        .iter()
+        .find(|tool| tool.name == "get_profile")
+        .unwrap();
+    assert_eq!(
+        profile_tool
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.0.get("openai/profile")),
+        Some(&serde_json::json!(true))
+    );
+    assert!(profile_tool.output_schema.is_some());
+    let profile = client
+        .call_tool(CallToolRequestParams::new("get_profile"))
+        .await
+        .unwrap();
+    assert_eq!(
+        profile.structured_content.as_ref().unwrap()["nickname"],
+        "Legacy connection"
+    );
+    assert!(profile.structured_content.as_ref().unwrap()["id"].is_string());
     for expected in [
         "bootstrap_project",
         "search_knowledge",
@@ -283,6 +327,47 @@ async fn mcp_client_retrieves_the_same_knowledge_as_http_services() {
     // MCP proposals are always AGENT -- a model cannot claim human trust.
     assert_eq!(stored.proposed_by, ownstate_domain::ProposerKind::Agent);
     assert_eq!(stored.status, ownstate_domain::CandidateStatus::Pending);
+
+    // Both evidence-writing tools accept the shapes advertised to clients.
+    let recorded = client
+        .call_tool(
+            CallToolRequestParams::new("record").with_arguments(
+                serde_json::json!({
+                    "project_id": project.id.to_string(),
+                    "event_type": "ASSISTANT_MESSAGE",
+                    "actor_type": "ASSISTANT",
+                    "content": "Observed a sample project decision.",
+                    "source_event_id": "mcp-roundtrip-project-event",
+                    "metadata": {"review_fixture": true}
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+    assert!(text_content(&recorded)["event_id"].is_string());
+
+    let chat_event = client
+        .call_tool(
+            CallToolRequestParams::new("record_conversation").with_arguments(
+                serde_json::json!({
+                    "source": "mcp-roundtrip",
+                    "source_conversation_id": "review-fixture-chat",
+                    "source_event_id": "mcp-roundtrip-chat-event",
+                    "event_type": "USER_MESSAGE",
+                    "actor_type": "USER",
+                    "content": "A sample non-project chat event."
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+    assert!(text_content(&chat_event)["event_id"].is_string());
 
     // Workspace resolution: bootstrap with NO project argument resolves the
     // project from the (injected) workspace directory name, creates it on

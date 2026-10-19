@@ -7,6 +7,10 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+argon2 = { version = "0.5", features = ["std"] }
+base64 = "0.22"
+rand_core = { version = "0.6", features = ["getrandom"] }
+sha2 = "0.10"
 ownstate-domain = { workspace = true }
 ownstate-embeddings = { workspace = true }
 ownstate-storage = { workspace = true }
@@ -19,6 +23,7 @@ sqlx = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }
